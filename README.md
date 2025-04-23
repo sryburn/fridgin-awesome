@@ -17,6 +17,8 @@ This project is heavily inspired by and based on the control algorithms from the
   - **Profile Mode**: For future recipe-based temperature profiles (not yet implemented)
 - Peak detection algorithms to learn the thermal characteristics of your fermentation chamber
 
+This project is designed to integrate with Home Assistant. There is no built in web interface on the device.
+
 ## Current Status
 
 This project is a work in progress. The core temperature control logic is implemented and functional, but some features like temperature profiles are still under development.
@@ -32,13 +34,23 @@ This project is a work in progress. The core temperature control logic is implem
 - 20x4 I2C LCD character display (optional)
 - Rotary encoder with pushbutton for interface (optional)
 
-This project is designed to be pin compatible with the BrewPiLess project.
-
-## Integration with Home Assistant
-
-This project is designed to integrate with Home Assistant. There is no built in web interface on the device.
+Note: This project is designed to be pin compatible with the [BrewPiLess](https://github.com/vitotai/BrewPiLess) project by default.
 
 ## Installation
+When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboardand then add the following to your yaml configuration and run the install.
+```
+packages:
+  remote_package: 
+    url: https://github.com/sryburn/fridgin-awesome/
+    file: fridgin-a.yaml
 
-Compile fridgin-a.yaml and upload to your ESP32 device using the ESPHome CLI or ESPHome add-on for Home Assistant. All system parameters, pin definitions etc are contained in the system_config.yaml file. You should also have a secrets.yaml file present or otherwise edit base_config.yaml directly with your wifi credentials, API key etc.
+substitutions:
+  # Update these with your actual addresses
+  fridge_temp_address: '0x31031687b04aff28'
+  beer_temp_address: '0xd103168221c1ff28'    
+```
+Your 1-wire addresses can be obtained from the device logs after the installation and updated accordingly. Note that all definitions contained in system_config.yaml (and elsewhere) can be overidden in your device yaml file, see https://esphome.io/components/packages.html. 
+
+When installing via the [ESPHome CLI](https://esphome.io/guides/installing_esphome.html), simply clone the repo, edit device_config.yaml as required, add your secrets .yaml file and/or edit base_config.yaml as required.
+run `esphome run fridgin-a.yaml` (as per https://esphome.io/guides/cli.html#run-command) to compile and upload to your device.
 
