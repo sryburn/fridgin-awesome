@@ -21,7 +21,7 @@ text_sensor:
     name: "Status Text"   
 
 sensor:
-    # these sensors are updated by the state machine for monitoring and debugging
+    # these sensors are updated by the state machine for monitoring and debugging only
   - platform: template
     name: "Last Actual Heat Overshoot"
     id: last_heat_overshoot
@@ -221,8 +221,11 @@ interval:
                 // Check for peak (temperature decreased by threshold), or timeout
                 if (((id(peak_reference_temp) - current_temp) > $peak_detection_threshold) || (id(time_in_state) > $heat_peak_detect_time)) {
                   
+                  // Record the setpoint overshoot for monitoring
+                  id(last_heat_overshoot).publish_state(id(peak_reference_temp) - id(fridge_set).state);
+
                   // Determine whether peak is above or below the estimated peak
-                  float relative_to_estimated_peak = id(peak_reference_temp) - estimated_peak;
+                  float relative_to_estimated_peak = id(peak_reference_temp) - estimated_peak;                  
                               
                   // Use relative position to estimated peak for determining adaptation direction
                   if (relative_to_estimated_peak > $heat_target_h) {
@@ -277,6 +280,9 @@ interval:
                 
                 // Check for peak (temperature increased by threshold), or timeout
                 if (((current_temp - id(peak_reference_temp)) > $peak_detection_threshold) || (id(time_in_state) > $cool_peak_detect_time)) {
+
+                  // Record the setpoint overshoot for monitoring
+                  id(last_cool_overshoot).publish_state(id(fridge_set).state - id(peak_reference_temp));
                 
                   // Determine whether peak is above or below the estimated peak
                   float relative_to_estimated_peak = estimated_peak - id(peak_reference_temp);
@@ -414,15 +420,3 @@ script:
 
                 // Record end of control action
                 id(last_control_action_ended) = id(seconds_elapsed);
-
-      - if:
-          condition:
-            lambda: 'return strcmp(state.c_str(), "WAITING_FOR_PEAK") == 0;'
-          then:
-            - lambda: |-
-                // set overshoot monitoring sensors
-                if (id(last_control_action) == 1) {
-                  id(last_heat_overshoot).publish_state(id(peak_reference_temp) - id(fridge_set).state);
-                } else if (id(last_control_action) == 2) {
-                  id(last_cool_overshoot).publish_state(id(fridge_set).state - id(peak_reference_temp));
-                }
