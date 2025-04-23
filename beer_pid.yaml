@@ -1,0 +1,177 @@
+sensor:
+  # Beer Temperature Slope sensor
+  - platform: template
+    id: beer_temp_slope
+    name: "Beer Temperature Slope"
+    unit_of_measurement: "°C/h"
+    accuracy_decimals: 3
+    update_interval: 1s
+    lambda: |-
+      // A simplified slope calculation
+      static float prev_temp = 0;
+      static float slope = 0;
+      static int prev_time = 0;
+      static int log_counter = 0;
+      
+      // Get current values
+      float current_temp = id(beer_temp_slow).state;
+      int current_time = id(seconds_elapsed);
+      
+      // Skip invalid readings
+      if (!id(beer_temp_slow).has_state() || isnan(current_temp)) {
+        return slope; // Return previous value
+      }
+      
+      // Initialize on first call
+      if (prev_time == 0) {
+        prev_temp = current_temp;
+        prev_time = current_time;
+        return 0;
+      }
+      
+      // Only calculate slope if at least 3 seconds have passed
+      int time_diff = current_time - prev_time;
+      if (time_diff < 3) {
+        return slope; // Not enough time has passed
+      }
+      
+      // Calculate temperature difference
+      float temp_diff = current_temp - prev_temp;
+      
+      // Safety check for extreme changes (likely sensor errors)
+      if (abs(temp_diff) > 5.0) {
+        ESP_LOGW("SLOPE", "Beer: Extreme temperature change: %.2f°C", temp_diff);
+        return slope; // Keep previous value
+      }
+      
+      // Convert to change per hour (°C/h)
+      float raw_slope = (temp_diff / time_diff) * 3600;
+      
+      // Apply exponential filter for smoothing (more smoothing for beer)
+      slope = slope * (1.0 - $beer_slope_alpha) + raw_slope * $beer_slope_alpha;
+      
+      // Log periodically
+      log_counter++;
+      if (log_counter >= 20) {
+        log_counter = 0;
+        ESP_LOGD("SLOPE", "Beer slope: %.3f°C/h (temp: %.2f→%.2f, time: %ds)", 
+                slope, prev_temp, current_temp, time_diff);
+      }
+      
+      // Update temperature history 
+      prev_temp = current_temp;
+      prev_time = current_time;
+      
+      return slope;
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          //================================================
+          // PID TEMPERATURE CONTROL FOR BEER MODE
+          //================================================
+          // This is the PID control logic for Beer mode that works as follows:
+          //
+          // 1. Proportional (P): Responds to current error
+          //    - How far is beer from target temperature right now?
+          //    - Larger difference → stronger heating/cooling response
+          //
+          // 2. Integral (I): Addresses persistent errors
+          //    - Has beer been consistently off-target over time?
+          //    - Gradually increases correction to eliminate steady-state error
+          //    - Updated every 60 seconds for stability
+          //
+          // 3. Derivative (D): Anticipates future trends
+          //    - Is beer temperature changing rapidly?
+          //    - Dampens response to prevent overshooting
+          //
+          // The PID controller calculates what fridge temperature is needed
+          // to bring the beer to its target temperature, accounting for the
+          // thermal mass of the beer and the dynamics of the chamber.
+          //================================================
+          
+          // Only run PID when in Beer mode
+          if (id(mode).state != "Beer" && id(mode).state != "Profile") {
+            return;
+          }
+          
+          // Calculate beer temperature error (proportional term)
+          id(beer_diff) = id(beer_set).state - id(beer_temp_slow).state;
+          
+          // Use the properly filtered beer temperature slope for derivative control
+          id(beer_slope) = id(beer_temp_slope).state;
+          
+          // Store current beer temperature for reference
+          id(prev_beer_temp) = id(beer_temp_slow).state;
+          id(last_temp_update_time) = id(seconds_elapsed);
+          
+          // Only update integral term every 60 seconds
+          static int integral_counter = 0;
+          if (++integral_counter >= 60) {
+            integral_counter = 0;
+            
+            // Determine integral update value (starting with beer error)
+            float integrator_update = id(beer_diff);
+            
+            // Only update when in IDLE state (anti-windup technique)
+            if (id(state_name).state != "IDLE") {
+              integrator_update = 0;  // No update when not IDLE
+            }
+            // Check if error is small enough to update integral
+            else if (abs(id(beer_diff)) < $pid_i_max_err) {
+              // Small error - apply standard anti-windup checks
+              bool update_sign = (integrator_update > 0);
+              bool integrator_sign = (id(beer_diff_integral) > 0);
+              
+              if (update_sign == integrator_sign) {
+                // Error and integrator have same sign (would increase integrator)
+                
+                // Check for actuator saturation (simplified)
+                float current_fridge_temp = id(fridge_temp).state;
+                float fridge_setting = id(fridge_set).state;
+                
+                // Don't increase integrator if already at limits
+                if ((update_sign && fridge_setting >= id(beer_set).state + $pid_max) ||
+                    (!update_sign && fridge_setting <= id(beer_set).state - $pid_max)) {
+                  integrator_update = 0;
+                }
+                
+                // Don't increase if fridge temp is far from setting (actuator saturated)
+                if ((!update_sign && current_fridge_temp > fridge_setting + 2) ||
+                    (update_sign && current_fridge_temp < fridge_setting - 2)) {
+                  integrator_update = 0;
+                }
+              } else {
+                // Integrator and error have opposite signs - decrease faster
+                integrator_update = integrator_update * 2;
+              }
+            } else {
+              // Large error - gradually decay the integral by 1/8
+              integrator_update = -(id(beer_diff_integral) / 8.0);
+            }
+            
+            // Apply the update to the integral
+            id(beer_diff_integral) += integrator_update;
+          }
+          
+          // Calculate PID output
+          float fridgeTemp = id(beer_set).state + 
+                            $pid_kp * id(beer_diff) + 
+                            $pid_ki * id(beer_diff_integral) + 
+                            $pid_kd * id(beer_slope);
+          
+          // Apply max difference constraint (pid_max from beer temp)
+          if (fridgeTemp > id(beer_set).state + $pid_max) {
+            fridgeTemp = id(beer_set).state + $pid_max;
+          } else if (fridgeTemp < id(beer_set).state - $pid_max) {
+            fridgeTemp = id(beer_set).state - $pid_max;
+          }
+          
+          // Store the calculated fridge setting
+          id(fridge_set_by_pid) = fridgeTemp;
+          
+          // Apply the new setpoint to the thermostat when in beer mode
+          auto call = id(fridge_set).make_call();
+          call.set_value(fridgeTemp);
+          call.perform();

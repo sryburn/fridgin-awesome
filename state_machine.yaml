@@ -1,0 +1,428 @@
+switch:
+  - platform: gpio
+    pin: $heat_pin
+    id: heater
+    name: heater  
+  - platform: gpio
+    pin: $cool_pin
+    id: cooler
+    name: cooler 
+
+text_sensor:
+  - platform: template
+    id: state_name
+    name: "Controller State"
+  - platform: template
+    id: clock_display
+  - platform: template
+    id: idle_clock_display    
+  - platform: template
+    id: status_text
+    name: "Status Text"   
+
+sensor:
+    # these sensors are updated by the state machine for monitoring and debugging
+  - platform: template
+    name: "Last Actual Heat Overshoot"
+    id: last_heat_overshoot
+    accuracy_decimals: 2
+  - platform: template
+    name: "Last Actual Cool Overshoot"
+    id: last_cool_overshoot
+    accuracy_decimals: 2 
+
+# FRIDGE TEMPERATURE CONTROL STATE MACHINE
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          // Update main time counter
+          id(seconds_elapsed)++;
+          id(time_in_state) = id(seconds_elapsed) - id(state_start);
+          id(time_in_idle) = id(seconds_elapsed) - id(last_control_action_ended);
+          
+          // Helper function to format seconds to HH:MM:SS
+          auto format_time = [](int seconds) -> std::string {
+            int hours = seconds / 3600;
+            int minutes = (seconds % 3600) / 60;
+            int secs = seconds % 60;
+            char time_str[20];
+            sprintf(time_str, " %02d:%02d:%02d", hours, minutes, secs);
+            return std::string(time_str);
+          };
+          
+          // Format state time into global variable
+          id(clock_display).publish_state(format_time(id(time_in_state)));
+          
+          // Calculate and format idle time (time since last control action ended, including peak detection time)
+          id(idle_clock_display).publish_state(format_time(id(time_in_idle)));
+        
+      - if:
+          condition:
+            lambda: 'return id(state_name).state == "IDLE";'
+          then:
+            - lambda: |-
+                // Check if we need to heat or cool
+                if (id(fridge_temp_slow).state > (id(fridge_set).state + $idle_range_h) && id(mode).state != "Off") {
+                  // Need to cool
+                  if ( id(time_in_idle) > $min_cool_idle_time ){
+                    // Can start cooling
+                    id(set_state)->execute("COOLING");
+                  } else {
+                    // Need to wait
+                    int countdown_seconds = $min_cool_idle_time - id(time_in_idle);
+                    id(state_time_remaining) = countdown_seconds;
+                    
+                    // Create status text with seconds count
+                    std::string status = "Waiting to cool " + std::to_string(countdown_seconds) + "s";
+                    id(status_text).publish_state(status);
+                  }
+                } else if (id(fridge_temp_slow).state < (id(fridge_set).state + $idle_range_l) && id(mode).state != "Off") {
+                  // Need to heat
+                  if ( id(time_in_idle) > $min_heat_idle_time) {
+                    // Can start heating
+                    id(set_state)->execute("HEATING");                
+                  } else {
+                    // Need to wait
+                    int countdown_seconds = $min_heat_idle_time - id(time_in_idle);
+                    id(state_time_remaining) = countdown_seconds;
+                    
+                    // Create status text with seconds count
+                    std::string status = "Waiting to heat " + std::to_string(countdown_seconds) + "s";
+                    id(status_text).publish_state(status);
+                  }
+                } else if (id(mode).state == "Off") {
+                  // off
+                  id(status_text).publish_state("Off");
+                } else {
+                  // idle
+                  id(status_text).publish_state("Idle" + id(idle_clock_display).state);
+                }
+
+      - if:
+          condition:
+            lambda: 'return id(state_name).state == "HEATING";'
+          then: 
+            - lambda: |-
+                int cappedHeatingSeconds = id(time_in_state) > $max_heat_time_for_est ? 
+                                            $max_heat_time_for_est : id(time_in_state);
+                float heatEstimatedPeak = id(fridge_temp_slow).state + 
+                                        (id(heat_overshoot_per_hour) / 3600 * cappedHeatingSeconds);
+                
+                // Store the calculated peak in a global variable for monitoring
+                id(estimated_peak_temperature) = heatEstimatedPeak;
+                
+                // Check if we should stop heating
+                bool heatingDone = false;
+                
+                // Stop if estimated peak will reach target
+                if (heatEstimatedPeak >= id(fridge_set).state) {
+                  heatingDone = true;
+                }
+                
+                // In beer mode, also stop if beer is already too warm
+                if ((id(mode).state == "Beer" || id(mode).state == "Profile") && 
+                    id(beer_temp_slow).state > id(beer_set).state + 0.2) {
+                  heatingDone = true;
+                }
+                
+                if (heatingDone) {
+                  // Check if minimum heating time has elapsed
+                  if ((id(seconds_elapsed) - id(state_start)) >= $min_heat_time) {
+                    // Transition to Waiting for Peak
+                    id(set_state)->execute("WAITING_FOR_PEAK");
+                  } else {
+                    // Continue heating until minimum time
+                    int countdown_seconds = $min_heat_time - id(time_in_state);
+                    id(state_time_remaining) = countdown_seconds;
+                    
+                    // Create status text with seconds count
+                    std::string status = "Heating Min Time " + std::to_string(countdown_seconds) + "s";
+                    id(status_text).publish_state(status);
+                  }
+                } else {
+                  // heating
+                  id(status_text).publish_state("Heating" + id(clock_display).state);
+                }
+
+      - if:
+          condition:
+            lambda: 'return id(state_name).state == "COOLING";'
+          then:
+            lambda: |-
+              int cappedCoolingSeconds = id(time_in_state) > $max_cool_time_for_est ? 
+                                           $max_cool_time_for_est : id(time_in_state);
+              float coolEstimatedPeak = id(fridge_temp_slow).state - 
+                                       (id(cool_overshoot_per_hour) / 3600 * cappedCoolingSeconds);
+              
+              // Store the calculated peak in a global variable for monitoring
+              id(estimated_peak_temperature) = coolEstimatedPeak;
+              
+              // Check if we should stop cooling
+              bool coolingDone = false;
+              
+              // Stop if estimated peak will reach target
+              if (coolEstimatedPeak <= id(fridge_set).state) {
+                coolingDone = true;
+              }
+              
+              // In beer mode, also stop if beer is already too cold
+              if ((id(mode).state == "Beer" || id(mode).state == "Profile") && 
+                  id(beer_temp_slow).state < id(beer_set).state - 0.2) {
+                coolingDone = true;
+              }
+              
+              if (coolingDone) {
+                // Check if minimum cooling time has elapsed
+                if ((id(seconds_elapsed) - id(state_start)) >= $min_cool_time) {
+                  // Transition to Waiting for Peak
+                  id(set_state)->execute("WAITING_FOR_PEAK");
+                } else {
+                  // Continue cooling until minimum time
+                  int countdown_seconds = $min_cool_time - id(time_in_state);
+                  id(state_time_remaining) = countdown_seconds;
+                  
+                  // Create status text with seconds count
+                  std::string status = "Cooling Min Time " + std::to_string(countdown_seconds) + "s";
+                  id(status_text).publish_state(status);
+                }
+              } else {
+                // cooling
+                id(status_text).publish_state("Cooling" + id(clock_display).state);
+              }
+
+      - if:
+          condition:
+            lambda: 'return id(state_name).state == "WAITING_FOR_PEAK";'
+          then:
+            lambda: |-
+              // Get current fridge temperature from slow sensor (smoothed)
+              float current_temp = id(fridge_temp_slow).state;
+              float estimated_peak = id(estimated_peak_temperature);
+
+              // Check if we are outside the idle range and update status text
+              // to show that the next control action is pending peak detection
+              // otherwise we are effectively idle (no heating or cooling)
+              if (current_temp > (id(fridge_set).state + $idle_range_h) || current_temp < (id(fridge_set).state + $idle_range_l) ){
+                id(status_text).publish_state("Waiting for peak");
+              } else{
+                id(status_text).publish_state("Idle" + id(idle_clock_display).state);
+              }
+              
+                     
+              // After HEATING: Look for temperature DECREASE from maximum
+              if (id(last_control_action) == 1) {
+                // Update maximum temperature if current reading is higher
+                if (current_temp > id(peak_reference_temp)) {
+                  id(peak_reference_temp) = current_temp;
+                  return; // No peak found, exit and check again next cycle
+                }
+                
+                // Check for peak (temperature decreased by threshold), or timeout
+                if (((id(peak_reference_temp) - current_temp) > $peak_detection_threshold) || (id(time_in_state) > $heat_peak_detect_time)) {
+                  
+                  // Determine whether peak is above or below the estimated peak
+                  float relative_to_estimated_peak = id(peak_reference_temp) - estimated_peak;
+                              
+                  // Use relative position to estimated peak for determining adaptation direction
+                  if (relative_to_estimated_peak > $heat_target_h) {
+                    // Peak too high - decrease heating time in future
+                    float error = abs(relative_to_estimated_peak);
+                    float factor = $increase_factor_base + 
+                                std::min(float(error * $error_adjustment_factor), float($max_factor_increase));
+                    
+                    // Store the adaptation factor in the global variable
+                    id(last_applied_adaptation_factor) = factor; 
+
+                    // Multiply the estimator by the factor
+                    id(heat_overshoot_per_hour) *= factor;
+                    
+                    // Ensure minimum value
+                    if (id(heat_overshoot_per_hour) < $min_estimator_value) {
+                      id(heat_overshoot_per_hour) = $min_estimator_value;
+                    }
+                    
+                  } else if (relative_to_estimated_peak < $heat_target_l) {
+                    // Peak too low - increase heating time in future
+                    float error = abs(relative_to_estimated_peak);
+                    float factor = $decrease_factor_base - 
+                                std::min(float(error * $error_adjustment_factor), float($max_factor_decrease));
+                    
+                    // Store the adaptation factor in the global variable
+                    id(last_applied_adaptation_factor) = factor;  
+
+                    // Multiply the estimator by the factor                                   
+                    id(heat_overshoot_per_hour) *= factor;
+                    
+                    // Ensure minimum value
+                    if (id(heat_overshoot_per_hour) < $min_estimator_value) {
+                      id(heat_overshoot_per_hour) = $min_estimator_value;
+                    }
+                  } else {
+                    // Peak is within target range - no adaptation needed
+                    id(last_applied_adaptation_factor) = 1.0;
+                  }
+                  // Transition to IDLE state after peak detection
+                  id(set_state)->execute("IDLE");
+                }
+              } 
+
+              // After COOLING: Look for temperature INCREASE from minimum
+              else if (id(last_control_action) == 2) {
+                // Update minimum temperature if current reading is lower
+                if (current_temp < id(peak_reference_temp)) {
+                  id(peak_reference_temp) = current_temp;
+                  return; // No peak found, exit and check again next cycle
+                }
+                
+                // Check for peak (temperature increased by threshold), or timeout
+                if (((current_temp - id(peak_reference_temp)) > $peak_detection_threshold) || (id(time_in_state) > $cool_peak_detect_time)) {
+                
+                  // Determine whether peak is above or below the estimated peak
+                  float relative_to_estimated_peak = estimated_peak - id(peak_reference_temp);
+                  
+                  // Use relative position to estimated peak for determining adaptation direction              
+                  if (relative_to_estimated_peak > $cool_target_h) {
+                    // Too much cooling - INCREASE in future to stop earlier
+                    float error = abs(relative_to_estimated_peak);
+                    float factor = $increase_factor_base + 
+                                std::min(float(error * $error_adjustment_factor), float($max_factor_increase));
+
+                    // Store the adaptation factor in the global variable
+                    id(last_applied_adaptation_factor) = factor;                                          
+
+                    // Multiply the estimator by the factor
+                    id(cool_overshoot_per_hour) *= factor;
+                    
+                    // Ensure minimum value
+                    if (id(cool_overshoot_per_hour) < $min_estimator_value) {
+                      id(cool_overshoot_per_hour) = $min_estimator_value;
+                    }
+
+                  } else if (relative_to_estimated_peak < $cool_target_l) {
+                    // Not enough cooling - DECREASE estimator to make cooling run longer in future
+                    float error = abs(relative_to_estimated_peak);
+                    float factor = $decrease_factor_base - 
+                                std::min(float(error * $error_adjustment_factor), float($max_factor_decrease));
+
+                    // Store the adaptation factor in the global variable
+                    id(last_applied_adaptation_factor) = factor;                                          
+                    
+                    // Multiply the estimator by the factor
+                    id(cool_overshoot_per_hour) *= factor;
+                    
+                    // Ensure minimum value
+                    if (id(cool_overshoot_per_hour) < $min_estimator_value) {
+                      id(cool_overshoot_per_hour) = $min_estimator_value;
+                    }
+                  } else {
+                    // Peak is within target range - no adaptation needed
+                    id(last_applied_adaptation_factor) = 1.0;
+                  }
+                  // Transition to IDLE state after peak detection
+                  id(set_state)->execute("IDLE");
+                }
+              }                
+
+script:
+  - id: set_state
+    parameters:
+      new_state: string
+    then:
+      - if:
+          condition:
+            lambda: 'return new_state != id(state_name).state;'
+          then:
+            - script.execute:
+                id: exit_state
+                state: !lambda 'return id(state_name).state;'      
+            - script.execute:
+                id: enter_state
+                state: !lambda 'return new_state;'
+            - lambda: 'id(state_name).publish_state(new_state);'
+
+  - id: enter_state
+    parameters:
+      state: string  
+    then:
+      - lambda: |-
+          // Reset the state start time
+          id(state_start) = id(seconds_elapsed);
+
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "IDLE") == 0;'
+          then:
+            - lambda: |-
+                // Make absolutely sure heater and cooler are turned off
+                id(heater).turn_off();
+                id(cooler).turn_off();
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "HEATING") == 0;'
+          then: 
+            - lambda: |-
+                // Turn on heater
+                id(heater).turn_on(); 
+                // Update last control action for prediction
+                id(last_control_action) = 1; // heating
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "COOLING") == 0;'
+          then:
+            - lambda: |-
+                // Turn on cooler
+                id(cooler).turn_on();           
+                // Update last control action for prediction
+                id(last_control_action) = 2; // cooling
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "WAITING_FOR_PEAK") == 0;'
+          then:
+            - lambda: |-
+                // Reset peak reference temperature
+                id(peak_reference_temp) = id(fridge_temp_slow).state;
+
+  - id: exit_state
+    parameters:
+      state: string  
+    then:
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "HEATING") == 0;'
+          then: 
+            - lambda: |-
+                // Turn off heater
+                id(heater).turn_off();
+                
+                // Increment heat count when exiting heating state
+                id(heat_count)++;
+
+                // Record end of control action
+                id(last_control_action_ended) = id(seconds_elapsed);
+
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "COOLING") == 0;'
+          then:
+            - lambda: |-
+                // Turn off cooler
+                id(cooler).turn_off();
+                
+                // Increment cool count when exiting cooling state
+                id(cool_count)++;          
+
+                // Record end of control action
+                id(last_control_action_ended) = id(seconds_elapsed);
+
+      - if:
+          condition:
+            lambda: 'return strcmp(state.c_str(), "WAITING_FOR_PEAK") == 0;'
+          then:
+            - lambda: |-
+                // set overshoot monitoring sensors
+                if (id(last_control_action) == 1) {
+                  id(last_heat_overshoot).publish_state(id(peak_reference_temp) - id(fridge_set).state);
+                } else if (id(last_control_action) == 2) {
+                  id(last_cool_overshoot).publish_state(id(fridge_set).state - id(peak_reference_temp));
+                }

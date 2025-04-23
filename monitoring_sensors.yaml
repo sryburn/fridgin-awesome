@@ -1,0 +1,145 @@
+# These sensors simply poll globals to expose their values for monitoring and debugging and can safely be excluded from the build.
+
+sensor:
+  # STATE MACHINE TIMING SENSORS
+  # ----------------------------
+  # Tracks how long the system has been in the current state (seconds)
+  - platform: template
+    name: "State Time Elapsed"
+    lambda: |-
+        return id(time_in_state);
+    update_interval: 1s
+    
+  # Shows countdown timer until state transition (seconds) 
+  - platform: template
+    name: "State Time Remaining"
+    lambda: |-
+      return id(state_time_remaining);
+    update_interval: 1s
+    
+  # CONTROL ACTION SENSORS
+  # ---------------------
+  # Indicates current/last control action (0=none, 1=heating, 2=cooling)
+  - platform: template
+    name: "last_control_action Sensor"
+    lambda: |-
+      return id(last_control_action);
+    update_interval: 1s
+    
+  # PREDICTIVE ALGORITHM SENSORS
+  # ---------------------------
+  # Rate of temperature rise during heating (°C per hour)
+  - platform: template
+    name: "heat_overshoot_per_hour Sensor"
+    lambda: |-
+      return id(heat_overshoot_per_hour);
+    update_interval: 1s
+    accuracy_decimals: 2    
+    
+  # Rate of temperature drop during cooling (°C per hour)
+  - platform: template
+    name: "cool_overshoot_per_hour Sensor"
+    lambda: |-
+      return id(cool_overshoot_per_hour);
+    update_interval: 1s    
+    accuracy_decimals: 2
+    
+  # OVERSHOOT MONITORING
+  # -------------------
+  # Real-time prediction of overshoot during active heating (°C)
+  - platform: template
+    name: "Heat Overshoot Sensor"
+    lambda: |-     
+      // Only show estimated overshoot during active heating
+      if (id(state_name).state == "HEATING") {
+        return id(estimated_peak_temperature) - id(fridge_temp_slow).state;
+      } else {
+        return 0;
+      }
+    update_interval: 1s    
+    accuracy_decimals: 2
+    
+  # Real-time prediction of overshoot during active cooling (°C)
+  - platform: template
+    name: "Cool Overshoot Sensor"
+    lambda: |-
+      // Only show estimated overshoot during active cooling
+      if (id(state_name).state == "COOLING") {
+        return id(fridge_temp_slow).state - id(estimated_peak_temperature);
+      } else {
+        return 0;
+      }
+    update_interval: 1s
+    accuracy_decimals: 2
+    
+  # Predicted temperature at which system will stabilize after heating/cooling (°C)
+  - platform: template
+    name: "Estimated Peak Temperature"
+    lambda: |-
+      return id(estimated_peak_temperature);
+    update_interval: 1s
+    accuracy_decimals: 2
+    
+  # CYCLE COUNTING
+  # -------------
+  # Total number of heating cycles since startup
+  - platform: template
+    name: "Heat Count"
+    lambda: |-
+      return id(heat_count);
+    update_interval: 10s
+    
+  # Total number of cooling cycles since startup
+  - platform: template
+    name: "Cool Count"
+    lambda: |-
+      return id(cool_count);
+    update_interval: 10s
+    
+  # PREDICTIVE ALGORITHM TUNING
+  # --------------------------
+  # Most recent adjustment factor applied to overshoot estimator
+  - platform: template
+    name: "Adaptation Factor"
+    update_interval: 1s
+    lambda: |-
+        return id(last_applied_adaptation_factor);   
+    accuracy_decimals: 2    
+    
+  # PID CONTROLLER VARIABLES (BEER MODE)
+  # -----------------------------------
+  # Difference between beer temperature and setpoint (°C)
+  - platform: template
+    name: "PID Beer Error"
+    lambda: |-
+      return id(beer_diff);
+    update_interval: 1s
+    
+  # Current rate of change of beer temperature (°C/hour)
+  - platform: template
+    name: "PID Beer Slope"
+    lambda: |-
+      return id(beer_slope);
+    update_interval: 1s
+    
+  # Accumulated beer temperature error over time (for I term)
+  - platform: template
+    name: "PID Beer Integral"
+    lambda: |-
+      return id(beer_diff_integral);
+    update_interval: 1s
+    
+  # Fridge temperature setpoint calculated by PID algorithm (°C)
+  - platform: template
+    name: "PID Fridge Setpoint"
+    lambda: |-
+      return id(fridge_set_by_pid);
+    update_interval: 1s
+    
+  # Raw PID calculation output before constraints (°C)
+  - platform: template
+    name: "PID Output"
+    lambda: |-
+      float pidOutput = $pid_kp * id(beer_diff) + $pid_ki * id(beer_diff_integral) + $pid_kd * id(beer_slope);
+      return pidOutput;
+    update_interval: 1s

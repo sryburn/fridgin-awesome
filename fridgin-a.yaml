@@ -1,0 +1,27 @@
+packages:
+  # System parameters, pin definitions, and all substitutions
+  system_config: !include system_config.yaml
+  
+  # Core ESPHome configuration (WiFi, API, logging, OTA), assumes a secrets.yaml file is present
+  base_config: !include base_config.yaml
+    
+  # Global variables for tracking system state
+  internal_state: !include internal_state.yaml
+  
+  # Temperature sensor configuration and filtering
+  temperature_sensors: !include temperature_sensors.yaml
+      
+  # Core temperature control state machine
+  state_machine: !include state_machine.yaml
+  
+  # User interface components and controls
+  ui: !include ui.yaml 
+
+  # PID controller for beer temperature management
+  beer_pid: !include beer_pid.yaml  
+
+  # [Optional] Debug sensors exposing internal variables
+  monitoring_sensors: !include monitoring_sensors.yaml
+  
+  # [Optional] Code for 20x4 LCD display and rotary encoder
+  hardware_controller: !include hardware_controller.yaml  

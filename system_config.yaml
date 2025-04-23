@@ -1,0 +1,71 @@
+substitutions:
+  # Device name
+  name: fa-black
+  friendly_name: fa-black
+
+  # PIN DEFINIIONS 
+  sda_pin: '21'
+  scl_pin: '22'
+  one_wire_pin: '23'
+  rotary_pushbutton: '25'
+  rotary_dt: '32'
+  rotary_clk: '33'
+  heat_pin: '16'
+  cool_pin: '17'
+
+  # ONE WIRE ADDRESSES
+  fridge_temp_address: '0x31031687b04aff28'
+  beer_temp_address: '0xd103168221c1ff28'
+
+  # SYSTEM PARAMETERS
+  temp_set_min: '1' #The fridge and beer temperatures cannot go below this value.
+  temp_set_max: '30' # The fridge and beer temperatures cannot go above this value.
+  temp_set_default: '20' # In case of reset where previous setting cannot be restored
+  
+  # Time parameters
+  min_cool_time: '180' # Minimum cooling time in seconds
+  min_cool_idle_time: '300' # Minimum idle time before cooling (in seconds)
+  min_heat_time: '180' # Minimum heating time (in seconds)
+  min_heat_idle_time: '300' # Minimum idle time before heating (in seconds)
+  # dead_time: '300' # Minimum idle time between heating and cooling (in seconds). Not used in this version.
+  heat_peak_detect_time: '1800' # Time limit for heating peak detection (30 minutes)
+  cool_peak_detect_time: '1800' # Time limit for cooling peak detection (30 minutes)
+  max_heat_time_for_est: '600' # Maximum time for heating overshoot estimator (seconds)
+  max_cool_time_for_est: '1200' # Maximum time for cooling overshoot estimator (seconds)
+  
+  # PID parameters
+  pid_kp: '5.0' # Proportional gain
+  pid_ki: '0.25' # Integral gain
+  pid_kd: '-1.5' # Derivative gain
+  pid_i_max_err: '0.5' # Max integral error (anti-windup)
+  pid_max: '10.0' # Max temperature difference for fridge setting
+  
+  # Temperature target ranges
+  idle_range_h: '1.0' # Temperature idle range top
+  idle_range_l: '-1.0' # Temperature idle range bottom
+  
+  # Overshoot target parameters from original BrewPiLess
+  heat_target_h: '0.3' # Heating target upper bound (+0.3°C) - max acceptable overshoot above target temp
+  heat_target_l: '-0.2' # Heating target lower bound (-0.2°C) - max acceptable undershoot below target temp
+  cool_target_h: '0.2' # Cooling target upper bound (+0.2°C) - max acceptable overshoot above target temp
+  cool_target_l: '-0.3' # Cooling target lower bound (-0.3°C) - max acceptable undershoot below target temp
+  peak_detection_threshold: '0.05' # Threshold for peak detection (0.05°C)
+  
+  # Estimator parameters
+  min_estimator_value: '0.05' # Minimum estimator value (0.05°C/hour)
+  increase_factor_base: '1.2' # Base factor for increasing estimator 
+  decrease_factor_base: '0.833' # Base factor for decreasing estimator
+  error_adjustment_factor: '0.031' # 3.1% adjustment per 1°C error
+  max_factor_increase: '0.3' # The adjustment factor will not exceed increase_factor_base + max_factor_increase
+  max_factor_decrease: '0.166' # The adjustment factor will not exceed decrease_factor_base - max_factor_decrease
+  default_heat_overshoot_per_hour: '10.2' # This value is adjusted over time through self learning unless reset via UI button
+  default_cool_overshoot_per_hour: '12.0' # This value is adjusted over time through self learning unless reset via UI button
+  
+  # Filter parameters - alpha values derived from BrewPi's b-values
+  # Original BrewPi used the formula alpha = 1/(2^b) for filter strength
+  # Higher b value = more smoothing = smaller alpha value
+  fridge_fast_alpha: '0.12' # Approximates BrewPi's b=1 filter (theoretical: 0.5)
+  fridge_slow_alpha: '0.02' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)
+  beer_fast_alpha: '0.04' # Approximates BrewPi's b=3 filter (theoretical: 0.125)
+  beer_slow_alpha: '0.02' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)
+  beer_slope_alpha: '0.04' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)

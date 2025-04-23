@@ -1,0 +1,84 @@
+globals:
+  # Main time counter (seconds)
+  - id: seconds_elapsed
+    type: int
+    restore_value: no
+    initial_value: '0' 
+  - id: peak_reference_temp
+    type: float
+    restore_value: no 
+    initial_value: '0'
+  - id: last_control_action
+    type: int # 1= heating, 2 = cooling
+    restore_value: no 
+    initial_value: '0'
+  - id: heat_overshoot_per_hour
+    type: float
+    restore_value: yes
+    initial_value: $default_heat_overshoot_per_hour # Default learning value based on observations
+  - id: cool_overshoot_per_hour
+    type: float
+    restore_value: yes
+    initial_value: $default_cool_overshoot_per_hour # Default learning value based on observations
+    
+  # State machine variables
+  - id: state_start
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: last_control_action_ended
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: time_in_state
+    type: int
+    restore_value: false
+    initial_value: '0'  
+  - id: time_in_idle
+    type: int
+    restore_value: false
+    initial_value: '0'     
+  - id: state_time_remaining
+    type: int 
+    restore_value: no
+  - id: heat_count
+    type: int
+    restore_value: yes
+    initial_value: '0' # Count of heating cycles for learning
+  - id: cool_count 
+    type: int
+    restore_value: yes
+    initial_value: '0' # Count of cooling cycles for learning
+  - id: last_applied_adaptation_factor
+    type: float
+    restore_value: no
+    initial_value: '1.0'
+  - id: estimated_peak_temperature
+    type: float
+    restore_value: no
+    initial_value: '0.0'        
+  
+  - id: beer_diff
+    type: float
+    restore_value: no
+    initial_value: '0' # Current beer temp error from setpoint
+  - id: beer_diff_integral
+    type: float
+    restore_value: no
+    initial_value: '0' # Integral of beer temp error
+  - id: beer_slope
+    type: float
+    restore_value: no
+    initial_value: '0' # Rate of change of beer temp
+  - id: prev_beer_temp
+    type: float
+    restore_value: no
+    initial_value: '0' # Previous beer temp for slope calculation
+  - id: fridge_set_by_pid
+    type: float
+    restore_value: no
+    initial_value: '20' # Fridge setpoint calculated by PID
+  - id: last_temp_update_time
+    type: int
+    restore_value: no
+    initial_value: '0' # Last time temperatures were updated

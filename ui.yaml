@@ -1,0 +1,121 @@
+globals:
+  - id: last_beer_setpoint
+    type: float
+    restore_value: no
+    initial_value: $temp_set_default
+
+number:
+  - platform: template
+    id: fridge_set
+    name: "Fridge Setpoint"
+    optimistic: true
+    min_value: $temp_set_min
+    max_value: $temp_set_max
+    restore_value: true
+    step: 0.1
+    initial_value: $temp_set_default
+    unit_of_measurement: °C
+    device_class: temperature
+    set_action:
+      then:
+        - lambda: |-
+            // When fridge setpoint changes, we should abandon the current state if necessary
+            // and reset into idle mode in order to initiate a fresh controller cycle with the new setpoint
+            // BUT only for user-initiated changes (Fridge mode), not Beer mode PID adjustments
+            if (id(mode).state == "Fridge") {  // User-initiated setpoint change
+              if (id(state_name).state == "HEATING" && x < id(estimated_peak_temperature)){
+                // If we're heating and the new setpoint is less than the expected peak,
+                // no action is required
+                return;
+              } else if (id(state_name).state == "COOLING" && x > id(estimated_peak_temperature)){
+                // If we're cooling and the new setpoint is greater than the expected peak,
+                // no action is required
+                return;
+              } else {
+                // We need to reset into idle mode
+                id(set_state)->execute("IDLE");
+              }
+            }
+
+  - platform: template
+    name: "Beer Set"
+    id: beer_set
+    optimistic: true
+    min_value: $temp_set_min
+    max_value: $temp_set_max
+    restore_value: true
+    step: 0.1
+    initial_value: $temp_set_default
+    unit_of_measurement: °C
+    device_class: temperature
+    set_action:
+      then:
+        - lambda: |-
+            // When the beer setpoint changes by more than 0.5°C, we should abandon peak detection and
+            // reset into idle mode in order to initiate a fresh controller cycle with the new setpoint.
+            if (abs(x - id(last_beer_setpoint)) >= 0.5 && (id(state_name).state == "WAITING_FOR_PEAK")) {
+              id(set_state)->execute("IDLE");
+            } 
+            id(last_beer_setpoint) = x;
+            
+select:
+  - platform: template
+    id: mode
+    name: Mode
+    optimistic: true
+    restore_value: true
+    options:
+      - 'Off'
+      - 'Fridge'
+      - 'Beer'
+      - 'Profile'
+    on_value:
+      - lambda: |-
+          // Set state to IDLE
+          id(set_state)->execute("IDLE"); 
+          
+          // Handle Beer/Profile modes specifically
+          if (x == "Beer" || x == "Profile") {
+            // Initialize Beer PID controller
+            id(prev_beer_temp) = id(beer_temp_slow).state;
+            id(beer_diff) = id(beer_set).state - id(beer_temp_slow).state;
+            id(beer_diff_integral) = 0;
+            id(beer_slope) = 0;
+            id(last_temp_update_time) = id(seconds_elapsed);
+            
+            // Initial fridge setting based on just proportional term
+            id(fridge_set_by_pid) = id(beer_set).state + (id(beer_diff) * $pid_kp);
+            
+            // Apply limits from pid_max
+            if (id(fridge_set_by_pid) > id(beer_set).state + $pid_max) {
+              id(fridge_set_by_pid) = id(beer_set).state + $pid_max;
+            } else if (id(fridge_set_by_pid) < id(beer_set).state - $pid_max) {
+              id(fridge_set_by_pid) = id(beer_set).state - $pid_max;
+            }
+            
+            // Apply the new setpoint
+            auto fridge_call = id(fridge_set).make_call();
+            fridge_call.set_value(id(fridge_set_by_pid));
+            fridge_call.perform();
+          } else if (x == "Fridge") {
+            // Reset PID values when switching to Fridge mode
+            id(beer_diff_integral) = 0;
+          }
+                     
+
+button:
+  - platform: template
+    name: "Reset Learning"
+    on_press:
+      - globals.set:
+          id: heat_overshoot_per_hour
+          value: $default_heat_overshoot_per_hour
+      - globals.set:
+          id: cool_overshoot_per_hour
+          value: $default_cool_overshoot_per_hour
+      - globals.set:
+          id: heat_count
+          value: '0'
+      - globals.set:
+          id: cool_count
+          value: '0'

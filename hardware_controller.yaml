@@ -1,0 +1,165 @@
+i2c:
+  sda: $sda_pin
+  scl: $scl_pin
+  frequency: 200kHz 
+
+binary_sensor:
+  - platform: gpio
+    id: rotary_pushbutton
+    pin: $rotary_pushbutton
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 10ms
+    on_press:
+      - display_menu.enter:
+
+globals:
+  - id: pending_beer_set
+    type: float
+    restore_value: no
+  - id: pending_fridge_set
+    type: float
+    restore_value: no
+  - id: is_editing_setpoint
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+sensor:
+  - platform: rotary_encoder
+    id: rotary_knob
+    pin_a: $rotary_clk
+    pin_b: $rotary_dt
+    resolution: 1
+    filters:
+      - debounce: 50ms
+    on_clockwise:
+      - lambda: |-
+          if (!id(is_editing_setpoint)) {
+            id(main_menu).down();
+            return;
+          }
+          
+          if (id(mode).state == "Beer" || id(mode).state == "Profile") {
+            id(pending_beer_set) += 0.1;
+            // Limit to maximum temperature
+            if (id(pending_beer_set) > $temp_set_max)
+              id(pending_beer_set) = $temp_set_max;
+            // Round to 0.1 degree precision
+            id(pending_beer_set) = roundf(id(pending_beer_set) * 10.0f) / 10.0f;
+          } else if (id(mode).state == "Fridge") {
+            id(pending_fridge_set) += 0.1;
+            // Limit to maximum temperature
+            if (id(pending_fridge_set) > $temp_set_max)
+              id(pending_fridge_set) = $temp_set_max;
+            // Round to 0.1 degree precision
+            id(pending_fridge_set) = roundf(id(pending_fridge_set) * 10.0f) / 10.0f;
+          }
+
+    on_anticlockwise:
+      - lambda: |-
+          if (!id(is_editing_setpoint)) {
+            id(main_menu).up();
+            return;
+          }
+          
+          if (id(mode).state == "Beer" || id(mode).state == "Profile") {
+            id(pending_beer_set) -= 0.1;
+            // Limit to minimum temperature
+            if (id(pending_beer_set) < $temp_set_min)
+              id(pending_beer_set) = $temp_set_min;
+            // Round to 0.1 degree precision
+            id(pending_beer_set) = roundf(id(pending_beer_set) * 10.0f) / 10.0f;
+          } else if (id(mode).state == "Fridge") {
+            id(pending_fridge_set) -= 0.1;
+            // Limit to minimum temperature
+            if (id(pending_fridge_set) < $temp_set_min)
+              id(pending_fridge_set) = $temp_set_min;
+            // Round to 0.1 degree precision
+            id(pending_fridge_set) = roundf(id(pending_fridge_set) * 10.0f) / 10.0f;
+          }
+
+  - platform: wifi_signal
+    name: "WiFi signal strength"
+    update_interval: 60s            
+
+lcd_menu:
+  id: main_menu
+  active: true
+  mode: rotary
+  items:
+    - type: select
+      immediate_edit: false
+      text: Mode
+      select: mode
+
+    - type: custom
+      text: !lambda |-
+        char buffer[20];
+        sprintf(buffer, "Beer %.1f", id(beer_temp_fast).state);
+        return std::string(buffer);          
+      value_lambda: !lambda |-
+        if (id(mode).state == "Beer" || id(mode).state == "Profile") {
+          char buffer[10];
+          // Show pending value if editing, otherwise show actual value
+          float display_value = id(is_editing_setpoint) ? id(pending_beer_set) : id(beer_set).state;
+          sprintf(buffer, "%.1f", display_value);
+          return std::string(buffer);
+        } else {
+          return "N/A";
+        } 
+      on_enter:
+        - globals.set:
+            id: is_editing_setpoint
+            value: 'true'
+        - lambda: |-
+            id(pending_beer_set) = roundf(id(beer_set).state * 10.0f) / 10.0f;
+      on_leave:
+        - globals.set:
+            id: is_editing_setpoint
+            value: 'false'   
+        - lambda: |-
+            id(pending_beer_set) = roundf(id(pending_beer_set) * 10.0f) / 10.0f;
+            auto call = id(beer_set).make_call();
+            call.set_value(id(pending_beer_set));
+            call.perform();
+
+
+    - type: custom
+      text: !lambda |-
+        char buffer[20];
+        sprintf(buffer, "Fridge %.1f", id(fridge_temp_fast).state);
+        return std::string(buffer);
+      value_lambda: !lambda |-
+        if (id(mode).state == "Fridge") {
+          char buffer[10];
+          // Show pending value if editing, otherwise show actual value
+          float display_value = id(is_editing_setpoint) ? id(pending_fridge_set) : id(fridge_set).state;
+          sprintf(buffer, "%.1f", display_value);
+          return std::string(buffer);
+        } else {
+          return "N/A";
+        }    
+      on_enter:
+        - globals.set:
+            id: is_editing_setpoint
+            value: 'true'
+        - lambda: |-
+            id(pending_fridge_set) = roundf(id(fridge_set).state * 10.0f) / 10.0f;
+      on_leave:
+        - globals.set:
+            id: is_editing_setpoint
+            value: 'false'            
+        - lambda: |-
+            id(pending_fridge_set) = roundf(id(pending_fridge_set) * 10.0f) / 10.0f;
+            auto call = id(fridge_set).make_call();
+            call.set_value(id(pending_fridge_set));
+            call.perform();
+
+display:
+  - platform: lcd_pcf8574
+    dimensions: 20x4
+    address: 0x27
+    lambda: |-
+      id(main_menu).draw();
+      it.print(0, 3, id(status_text).state);     
