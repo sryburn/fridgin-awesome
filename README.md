@@ -37,7 +37,7 @@ This project is a work in progress. The core temperature control logic is implem
 Note: This project is hardware compatible with [BrewPiLess](https://github.com/vitotai/BrewPiLess).
 
 ## Installation
-When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboardand then add the following to your yaml configuration and run the install.
+When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboard and then add the following to your esphome yaml configuration and run the install.
 ```
 packages:
   remote_package: 
