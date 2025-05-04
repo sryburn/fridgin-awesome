@@ -20,6 +20,9 @@ packages:
   # PID controller for beer temperature management
   beer_pid: !include beer_pid.yaml  
 
+  # Beer profile management
+  beer_profile: !include beer-profile.yaml
+
   # [Optional] Debug sensors exposing internal variables
   monitoring_sensors: !include monitoring_sensors.yaml
   

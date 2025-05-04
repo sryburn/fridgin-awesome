@@ -14,7 +14,7 @@ This project is heavily inspired by and based on the control algorithms from the
 - Different control modes:
   - **Beer Mode**: Regulates beer temperature (using PID to control fridge temperature)
   - **Fridge Mode**: Directly regulates fridge/chamber temperature
-  - **Profile Mode**: For future recipe-based temperature profiles (not yet implemented)
+  - **Profile Mode**: For future recipe-based temperature profiles (under development)
 - Peak detection algorithms to learn the thermal characteristics of your fermentation chamber
 
 This project is designed to integrate with Home Assistant. There is no built in web interface on the device.

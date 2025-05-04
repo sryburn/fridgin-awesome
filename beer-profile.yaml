@@ -1,0 +1,321 @@
+# Enable JSON component
+json:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+  services:
+    - service: apply_beer_profile
+      variables:
+        profile_json: string
+      then:
+        - lambda: |-           
+            // Check for custom start time in JSON, otherwise use current time
+            id(profile_start_time) = id(homeassistant_time).now().timestamp;
+            
+            // Allow specifying a custom start time in the JSON
+            json::parse_json(profile_json, [&](JsonObject root) {
+              if (root.containsKey("start_time")) {
+                id(profile_start_time) = root["start_time"].as<time_t>();
+                ESP_LOGD("beer_profile", "Using custom start time: %ld", id(profile_start_time));
+              }
+              return true;
+            });
+            
+            id(profile_current_step) = 0;
+            
+            // Clear existing steps
+            for (int i = 0; i < id(MAX_PROFILE_STEPS); i++) {
+              id(profile_step_types)[i] = 0; // 0=none, 1=hold, 2=ramp
+              id(profile_step_temps)[i] = 0;
+              id(profile_step_durations)[i] = 0.0; // Changed to float
+            }
+            
+            // Parse the JSON
+            int step_count = 0;
+            json::parse_json(profile_json, [&](JsonObject root) {
+              if (root["steps"].is<JsonArray>()) {
+                JsonArray steps = root["steps"].as<JsonArray>();
+                for (JsonObject step : steps) {
+                  if (step_count >= id(MAX_PROFILE_STEPS)) {
+                    ESP_LOGW("beer_profile", "Too many steps, truncating to %d", id(MAX_PROFILE_STEPS));
+                    break;
+                  }
+                  
+                  if (step.containsKey("type")) {
+                    const char* type = step["type"];
+                    
+                    if (strcmp(type, "hold") == 0) {
+                      id(profile_step_types)[step_count] = 1; // hold
+                      if (step.containsKey("temperature")) {
+                        id(profile_step_temps)[step_count] = step["temperature"];
+                      }
+                    } else if (strcmp(type, "ramp") == 0) {
+                      id(profile_step_types)[step_count] = 2; // ramp
+                      if (step.containsKey("target_temperature")) {
+                        id(profile_step_temps)[step_count] = step["target_temperature"];
+                      }
+                    }
+                    
+                    if (step.containsKey("duration_hours")) {
+                      // Store duration as float to handle partial hours correctly
+                      id(profile_step_durations)[step_count] = step["duration_hours"].as<float>();
+                      
+                      // Add extra debug output
+                      ESP_LOGD("beer_profile", "Step %d duration: %.3f hours (%.1f minutes)", 
+                              step_count + 1, 
+                              id(profile_step_durations)[step_count],
+                              id(profile_step_durations)[step_count] * 60.0f);
+                      
+                      step_count++;
+                    }
+                  }
+                }
+              }
+              return true;
+            });
+            
+            id(profile_steps_count) = step_count;
+            
+            // Calculate initial setpoint
+            if (step_count > 0) {
+              if (id(profile_step_types)[0] == 1) { // hold
+                id(beer_set).state = id(profile_step_temps)[0];
+              }
+            }
+            
+            // Update status displays
+            id(beer_profile_status).publish_state("Active");
+            id(beer_profile_step).publish_state("Starting profile...");
+            
+            ESP_LOGD("beer_profile", "Applied new profile with %d steps, starting at timestamp %ld", 
+                    step_count, id(profile_start_time));
+        # Call the profile calculation script immediately
+        - script.execute: calculate_beer_profile
+
+# Time component to track elapsed time properly
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+# Define maximum steps in profile
+# Storage for profile data
+globals:
+  - id: profile_start_time
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: profile_current_step
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: profile_steps_count
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: MAX_PROFILE_STEPS
+    type: int
+    restore_value: false
+    initial_value: '10'
+  - id: profile_step_types
+    type: int[10]
+    restore_value: true
+    initial_value: '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}'
+  - id: profile_step_temps
+    type: float[10]
+    restore_value: true
+    initial_value: '{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}'
+  - id: profile_step_durations
+    type: float[10]  # Changed from int to float
+    restore_value: true
+    initial_value: '{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}'
+
+# Create a script for the profile calculation
+script:
+  - id: calculate_beer_profile
+    then:
+      - lambda: |-
+          if (id(mode).state != "Profile" || id(profile_steps_count) == 0) {
+            // Profile inactive or empty
+            id(beer_profile_status).publish_state("Inactive");
+            id(profile_elapsed_time).publish_state("--");
+            id(profile_step_remaining_time).publish_state("--");
+            return;
+          }
+          
+          // Get current time
+          time_t now = id(homeassistant_time).now().timestamp;
+          
+          // Calculate elapsed time in seconds
+          uint32_t elapsed_seconds = now - id(profile_start_time);
+          
+          // Add debug output
+          ESP_LOGD("beer_profile", "Profile time check - elapsed: %u seconds (%.2f hours)", 
+                  elapsed_seconds, elapsed_seconds / 3600.0f);
+          
+          // Find current step based on elapsed time
+          uint32_t step_start_seconds = 0;
+          bool found_step = false;
+          
+          for (int i = 0; i < id(profile_steps_count); i++) {
+            uint32_t step_duration_seconds = id(profile_step_durations)[i] * 3600.0f; // Cast to float
+            uint32_t step_end_seconds = step_start_seconds + step_duration_seconds;
+            
+            ESP_LOGD("beer_profile", "Step %d: starts at %u seconds, ends at %u seconds (duration: %.1f minutes)", 
+                    i + 1, step_start_seconds, step_end_seconds, id(profile_step_durations)[i] * 60.0f);
+            
+            if (elapsed_seconds >= step_start_seconds && elapsed_seconds < step_end_seconds) {
+              // We're in this step
+              if (id(profile_current_step) != i) {
+                id(profile_current_step) = i;
+                ESP_LOGD("beer_profile", "Moved to step %d", i + 1);
+              }
+              
+              // Calculate target temperature
+              int type = id(profile_step_types)[i];
+              float target_temp = 20.0f;  // Default
+              
+              if (type == 1) { // hold
+                target_temp = id(profile_step_temps)[i];
+              } else if (type == 2) { // ramp
+                // For RAMP: interpolate between previous and next temperature
+                float prev_temp = 20.0f;  // Default
+                if (i > 0) {
+                  prev_temp = id(profile_step_temps)[i-1];
+                }
+                
+                float next_temp = id(profile_step_temps)[i];
+                
+                // Calculate position in ramp (0.0 to 1.0)
+                float position = (float)(elapsed_seconds - step_start_seconds) / step_duration_seconds;
+                
+                // Linear interpolation 
+                target_temp = prev_temp + position * (next_temp - prev_temp);
+                // Round to 1 decimal place
+                target_temp = roundf(target_temp * 10.0f) / 10.0f;
+                
+                ESP_LOGD("beer_profile", "Ramp position: %.2f (%.1f°C to %.1f°C) = %.1f°C", 
+                        position, prev_temp, next_temp, target_temp);
+              }
+              
+              // Update setpoint
+              id(beer_set).state = target_temp;
+              
+              // Update step description
+              char buffer[64];
+              if (type == 1) { // hold
+                sprintf(buffer, "Hold at %.1f°C for %.1f hours", 
+                        id(profile_step_temps)[i], id(profile_step_durations)[i]);
+              } else if (type == 2) { // ramp
+                sprintf(buffer, "Ramp to %.1f°C over %.1f hours", 
+                        id(profile_step_temps)[i], id(profile_step_durations)[i]);
+              }
+              id(beer_profile_step).publish_state(buffer);
+              
+              // Calculate time elapsed in current step (in seconds)
+              uint32_t step_elapsed_seconds = elapsed_seconds - step_start_seconds;
+              
+              // Calculate elapsed and remaining time for the current step in minutes
+              uint32_t step_duration_minutes = (uint32_t)(id(profile_step_durations)[i] * 60.0f);
+              uint32_t step_elapsed_minutes = step_elapsed_seconds / 60;
+              uint32_t step_remaining_minutes = step_duration_minutes - step_elapsed_minutes;
+              
+              // Format and update remaining time for current step
+              char remaining_buffer[64];
+              if (step_remaining_minutes >= 1440) { // 24 hours in minutes
+                uint32_t days = step_remaining_minutes / 1440;
+                uint32_t remaining = step_remaining_minutes % 1440;
+                uint32_t hours = remaining / 60;
+                uint32_t minutes = remaining % 60;
+                sprintf(remaining_buffer, "%dd %dh %dm", days, hours, minutes);
+              } else if (step_remaining_minutes >= 60) {
+                uint32_t hours = step_remaining_minutes / 60;
+                uint32_t minutes = step_remaining_minutes % 60;
+                sprintf(remaining_buffer, "%dh %dm", hours, minutes);
+              } else {
+                sprintf(remaining_buffer, "%dm", step_remaining_minutes);
+              }
+              
+              id(profile_step_remaining_time).publish_state(remaining_buffer);
+              
+              // Log calculation for debugging
+              ESP_LOGD("beer_profile", "Step time - Total: %u minutes, Elapsed: %u minutes, Remaining: %u minutes", 
+                      step_duration_minutes, step_elapsed_minutes, step_remaining_minutes);
+              
+              found_step = true;
+              break;
+            }
+            
+            step_start_seconds = step_end_seconds;
+          }
+          
+          // If we didn't find a step, we've completed the profile
+          if (!found_step) {
+            if (id(profile_current_step) < id(profile_steps_count)) {
+              id(profile_current_step) = id(profile_steps_count);
+              ESP_LOGD("beer_profile", "Profile completed");
+              
+              // Keep the last temperature
+              if (id(profile_steps_count) > 0) {
+                int last_idx = id(profile_steps_count) - 1;
+                id(beer_set).state = id(profile_step_temps)[last_idx];
+              }
+              
+              id(beer_profile_step).publish_state("Profile complete");
+              id(profile_step_remaining_time).publish_state("Complete");
+            }
+          }
+          
+          // Update status text
+          char status_buffer[64];
+          if (found_step) {
+            sprintf(status_buffer, "Active - Step %d of %d", id(profile_current_step) + 1, id(profile_steps_count));
+          } else {
+            sprintf(status_buffer, "Profile complete");
+          }
+          id(beer_profile_status).publish_state(status_buffer);
+          
+          // Format and update elapsed time display with days, hours, minutes
+          char time_buffer[64];
+          uint32_t days = elapsed_seconds / 86400;
+          uint32_t remaining = elapsed_seconds % 86400;
+          uint32_t hours = remaining / 3600;
+          remaining = remaining % 3600;
+          uint32_t minutes = remaining / 60;
+          
+          if (days > 0) {
+            sprintf(time_buffer, "%dd %dh %dm", days, hours, minutes);
+          } else if (hours > 0) {
+            sprintf(time_buffer, "%dh %dm", hours, minutes);
+          } else {
+            sprintf(time_buffer, "%dm", minutes);
+          }
+          
+          id(profile_elapsed_time).publish_state(time_buffer);
+
+# Run profile calculation regularly
+interval:
+  - interval: 60s
+    then:
+      - script.execute: calculate_beer_profile
+   
+# Text sensor to show current profile status
+text_sensor:
+  - platform: template
+    name: "Beer Profile Status"
+    id: beer_profile_status
+    
+  - platform: template
+    name: "Beer Profile Current Step"
+    id: beer_profile_step
+    
+  - platform: template
+    name: "Beer Profile Elapsed Time"
+    id: profile_elapsed_time
+    icon: "mdi:clock-outline"
+    
+  - platform: template
+    name: "Beer Profile Step Remaining Time"
+    id: profile_step_remaining_time
+    icon: "mdi:clock-end"
