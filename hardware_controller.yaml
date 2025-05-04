@@ -96,7 +96,7 @@ lcd_menu:
     - type: custom
       text: !lambda |-
         char buffer[20];
-        sprintf(buffer, "Beer %.1f", id(beer_temp_fast).state);
+        sprintf(buffer, "Beer %.1f", id(beer_temp).state);
         return std::string(buffer);          
       value_lambda: !lambda |-
         if (id(mode).state == "Beer" || id(mode).state == "Profile") {
@@ -128,7 +128,7 @@ lcd_menu:
     - type: custom
       text: !lambda |-
         char buffer[20];
-        sprintf(buffer, "Fridge %.1f", id(fridge_temp_fast).state);
+        sprintf(buffer, "Fridge %.1f", id(fridge_temp).state);
         return std::string(buffer);
       value_lambda: !lambda |-
         if (id(mode).state == "Fridge") {

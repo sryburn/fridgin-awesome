@@ -8,80 +8,35 @@ sensor:
     update_interval: 1s
     name: "Fridge Temperature" 
     id: fridge_temp
-    accuracy_decimals: 2
-    filters:
-      - filter_out: 85.0  # Filter out the DS18B20 error value
-      - filter_out: nan
-      - clamp:
-          min_value: -20
-          max_value: 75
-          ignore_out_of_range: true
+    accuracy_decimals: 5
+
   - platform: dallas_temp
     address: $beer_temp_address
     update_interval: 1s    
     name: "Beer Temperature" 
     id: beer_temp
-    accuracy_decimals: 2
-    filters:
-      - filter_out: 85.0  # Filter out the DS18B20 error value
-      - filter_out: nan
-      - clamp:
-          min_value: -20
-          max_value: 75
-          ignore_out_of_range: true 
-  # Fridge temperature filters - adjusted to approximate BrewPiLess filters
-  #================================================
-  # TEMPERATURE FILTERING SYSTEM
-  #================================================
-  # The controller uses a dual filtering approach:
-  #
-  # FAST FILTERS:
-  # - Respond quickly to temperature changes
-  # - Used for immediate control decisions
-  # - Provide responsive readings for display
-  # - Minimally filtered to show current conditions
-  #
+    accuracy_decimals: 5
+
   # SLOW FILTERS:
   # - Apply heavy smoothing to eliminate noise
   # - Essential for reliable peak detection
   # - Used for PID control to prevent oscillation
   # - Help system distinguish real trends from noise
-  #
-  # This dual approach gives both responsiveness for 
-  # UI/display and stability for control algorithms.
-  #================================================
-  
-  # Fridge temperature fast filter - for responsive control and display
-  - platform: copy 
-    source_id: fridge_temp
-    id: fridge_temp_fast
-    name: Fridge Temperature Fast
-    accuracy_decimals: 2
-    filters:    
-      - exponential_moving_average:
-          alpha: $fridge_fast_alpha
-          send_every: 1
-    
-  # Fridge temperature slow filter - for stable peak detection
+
   - platform: copy 
     source_id: fridge_temp
     id: fridge_temp_slow
     name: Fridge Temperature Slow
     accuracy_decimals: 2  
     filters: 
+      - filter_out: 85.0  # Filter out the DS18B20 error value
+      - filter_out: nan
+      - clamp:
+          min_value: -20
+          max_value: 75
+          ignore_out_of_range: true      
       - exponential_moving_average:
           alpha: $fridge_slow_alpha
-          send_every: 1
-          
-  # Beer temperature filters - adjusted to approximate BrewPiLess filters
-  - platform: copy 
-    source_id: beer_temp
-    id: beer_temp_fast
-    name: Beer Temperature Fast
-    accuracy_decimals: 2
-    filters:    
-      - exponential_moving_average:
-          alpha: $beer_fast_alpha
           send_every: 1
     
   - platform: copy 
@@ -89,7 +44,13 @@ sensor:
     id: beer_temp_slow
     name: Beer Temperature Slow  
     accuracy_decimals: 2
-    filters: 
+    filters:
+      - filter_out: 85.0  # Filter out the DS18B20 error value
+      - filter_out: nan
+      - clamp:
+          min_value: -20
+          max_value: 75
+          ignore_out_of_range: true       
       - exponential_moving_average:
           alpha: $beer_slow_alpha
           send_every: 1          

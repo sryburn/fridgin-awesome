@@ -16,7 +16,7 @@ substitutions:
   # ONE WIRE ADDRESSES
   fridge_temp_address: '0x31031687b04aff28'
   beer_temp_address: '0xd103168221c1ff28'
-
+                      
   # SYSTEM PARAMETERS
   temp_set_min: '1' #The fridge and beer temperatures cannot go below this value.
   temp_set_max: '30' # The fridge and beer temperatures cannot go above this value.
@@ -58,14 +58,12 @@ substitutions:
   error_adjustment_factor: '0.031' # 3.1% adjustment per 1°C error
   max_factor_increase: '0.3' # The adjustment factor will not exceed increase_factor_base + max_factor_increase
   max_factor_decrease: '0.166' # The adjustment factor will not exceed decrease_factor_base - max_factor_decrease
-  default_heat_overshoot_per_hour: '10.2' # This value is adjusted over time through self learning unless reset via UI button
+  default_heat_overshoot_per_hour: '8.0' # This value is adjusted over time through self learning unless reset via UI button
   default_cool_overshoot_per_hour: '12.0' # This value is adjusted over time through self learning unless reset via UI button
   
   # Filter parameters - alpha values derived from BrewPi's b-values
   # Original BrewPi used the formula alpha = 1/(2^b) for filter strength
   # Higher b value = more smoothing = smaller alpha value
-  fridge_fast_alpha: '0.12' # Approximates BrewPi's b=1 filter (theoretical: 0.5)
   fridge_slow_alpha: '0.02' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)
-  beer_fast_alpha: '0.04' # Approximates BrewPi's b=3 filter (theoretical: 0.125)
   beer_slow_alpha: '0.02' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)
   beer_slope_alpha: '0.04' # Approximates BrewPi's b=4 filter (theoretical: 0.0625)

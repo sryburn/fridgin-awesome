@@ -34,7 +34,7 @@ This project is a work in progress. The core temperature control logic is implem
 - 20x4 I2C LCD character display (optional)
 - Rotary encoder with pushbutton for interface (optional)
 
-Note: This project is designed to be pin compatible with the [BrewPiLess](https://github.com/vitotai/BrewPiLess) project by default.
+Note: This project is hardware compatible with [BrewPiLess](https://github.com/vitotai/BrewPiLess).
 
 ## Installation
 When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboardand then add the following to your yaml configuration and run the install.
