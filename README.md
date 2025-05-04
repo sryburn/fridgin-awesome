@@ -34,10 +34,12 @@ This project is a work in progress. The core temperature control logic is implem
 - 20x4 I2C LCD character display (optional)
 - Rotary encoder with pushbutton for interface (optional)
 
+![Fermentation Controller Hardware](docs/fridgin-a.png)
+
 Note: This project is hardware compatible with [BrewPiLess](https://github.com/vitotai/BrewPiLess).
 
 ## Installation
-When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboardand then add the following to your yaml configuration and run the install.
+When installing via the [ESPHome addon](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant, simply add your new device via the dashboard and then add the following to your esphome yaml configuration and run the install.
 ```
 packages:
   remote_package: 
@@ -52,5 +54,5 @@ substitutions:
 Your 1-wire addresses can be obtained from the device logs after the installation and updated accordingly. Note that all definitions contained in system_config.yaml (and elsewhere) can be overidden in your device yaml file, see https://esphome.io/components/packages.html. 
 
 When installing via the [ESPHome CLI](https://esphome.io/guides/installing_esphome.html), simply clone the repo, edit device_config.yaml as required, add your secrets .yaml file and/or edit base_config.yaml as required.
-run `esphome run fridgin-a.yaml` (as per https://esphome.io/guides/cli.html#run-command) to compile and upload to your device.
+Run `esphome run fridgin-a.yaml` (as per https://esphome.io/guides/cli.html#run-command) to compile and upload to your device.
 
