@@ -171,6 +171,9 @@ interval:
           // Store the calculated fridge setting
           id(fridge_set_by_pid) = fridgeTemp;
           
+          // Round to 1 decimal place before applying
+          fridgeTemp = roundf(fridgeTemp * 10.0) / 10.0;
+          
           // Apply the new setpoint to the thermostat when in beer mode
           auto call = id(fridge_set).make_call();
           call.set_value(fridgeTemp);

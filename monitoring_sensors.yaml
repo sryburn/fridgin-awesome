@@ -143,3 +143,8 @@ sensor:
       float pidOutput = $pid_kp * id(beer_diff) + $pid_ki * id(beer_diff_integral) + $pid_kd * id(beer_slope);
       return pidOutput;
     update_interval: 1s
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IP Address    

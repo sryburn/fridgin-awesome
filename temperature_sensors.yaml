@@ -8,14 +8,14 @@ sensor:
     update_interval: 1s
     name: "Fridge Temperature" 
     id: fridge_temp
-    accuracy_decimals: 5
+    accuracy_decimals: 2
 
   - platform: dallas_temp
     address: $beer_temp_address
     update_interval: 1s    
     name: "Beer Temperature" 
     id: beer_temp
-    accuracy_decimals: 5
+    accuracy_decimals: 2
 
   # SLOW FILTERS:
   # - Apply heavy smoothing to eliminate noise
