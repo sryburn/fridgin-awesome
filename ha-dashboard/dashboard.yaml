@@ -520,7 +520,7 @@ views:
               ((total_days.value * 24 * 60) % 60) | round %} Total Duration: {{
               days }} days, {{ remaining_hours }} hours, {{ minutes }} minutes
   - title: Advanced
-    path: fermentation
+    path: advanced
     type: sections
     max_columns: 4
     sections:
