@@ -1,0 +1,645 @@
+title: Fridgin' Awesome Fermentation Controller
+views:
+  - title: Fermentation
+    path: fermentation
+    type: sections
+    max_columns: 5
+    sections:
+      - type: grid
+        cards:
+          - type: entities
+            entities:
+              - entity: sensor.${DEVICE}_beer_temperature
+                name: Beer Temperature
+              - entity: sensor.${DEVICE}_fridge_temperature
+                name: Fridge Temperature
+              - entity: select.${DEVICE}_mode
+                name: Mode
+              - entity: sensor.${DEVICE}_status_text
+                name: Status
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: select.${DEVICE}_mode
+                state:
+                  - Beer
+                  - Profile
+            card:
+              type: entities
+              entities:
+                - entity: number.${DEVICE}_beer_set
+                  name: Beer Setpoint
+                  icon: mdi:target
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: select.${DEVICE}_mode
+                state: Fridge
+            card:
+              type: entities
+              entities:
+                - entity: number.${DEVICE}_fridge_setpoint
+                  name: Fridge Setpoint
+                  icon: mdi:target
+      - type: grid
+        column_span: 4
+        cards:
+          - type: history-graph
+            hours_to_show: 16
+            entities:
+              - entity: sensor.${DEVICE}_fridge_temperature_slow
+                name: Fridge Temperature
+              - entity: sensor.${DEVICE}_controller_state
+                name: Controller State
+              - entity: sensor.${DEVICE}_beer_temperature_slow
+                name: Beer Temperature
+              - entity: number.${DEVICE}_fridge_setpoint
+                name: Fridge Setpoint
+              - entity: number.${DEVICE}_beer_set
+                name: Beer Setpoint
+            grid_options:
+              columns: full
+  - title: Beer Profile
+    type: sections
+    path: beer-profile
+    max_columns: 4
+    sections:
+      - type: grid
+        cards:
+          - type: entities
+            title: Beer Fermentation Profile Status
+            entities:
+              - entity: number.${DEVICE}_beer_set
+                name: Current Temperature Setpoint
+              - entity: sensor.${DEVICE}_beer_profile_status
+                name: Profile Status
+              - entity: sensor.${DEVICE}_beer_profile_current_step
+                name: Current Step
+              - entity: sensor.${DEVICE}_beer_profile_step_remaining_time
+                name: Current Step Time Remaining
+              - entity: sensor.${DEVICE}_beer_profile_elapsed_time
+                name: Total Time Elapsed
+                icon: mdi:clock-outline
+          - type: entities
+            title: Profile Management
+            entities:
+              - entity: select.beer_profile_selection
+                name: Profile Selection
+              - entity: input_text.profile_name
+                name: Profile Name
+          - type: grid
+            square: false
+            columns: 3
+            cards:
+              - type: button
+                name: Save Profile
+                icon: mdi:content-save
+                tap_action:
+                  action: call-service
+                  service: script.save_beer_profile
+                show_icon: true
+                show_name: true
+                icon_height: 40px
+              - type: button
+                name: Delete Profile
+                icon: mdi:delete
+                tap_action:
+                  action: call-service
+                  service: script.delete_beer_profile
+                show_icon: true
+                show_name: true
+                icon_height: 40px
+              - type: button
+                name: Apply Profile
+                icon: mdi:send
+                tap_action:
+                  action: call-service
+                  service: script.apply_custom_beer_profile
+                show_icon: true
+                show_name: true
+                icon_height: 40px
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Beer Profile Timeline
+              show_states: true
+            graph_span: 30d
+            update_interval: 10s
+            span:
+              offset: +15d
+            series:
+              - entity: input_number.profile_step_count
+                name: Profile Plan
+                type: line
+                stroke_width: 2
+                color: rgba(176, 196, 222, 0.5)
+                show:
+                  legend_value: false
+                  in_header: false
+                extend_to: now
+                data_generator: |
+                  const data = [];
+
+                  const stepCount = entity.state;
+
+                  // Safety check - make sure we have a valid step count
+                  if (isNaN(stepCount) || stepCount < 1) {
+                    return [[Date.now(), 0]];
+                  }
+
+                  try {
+                    // Get start time
+                    const startTimeState = hass.states['input_datetime.beer_profile_start_time'].state;
+                    let currentTime = new Date(startTimeState).getTime();
+                    let previousTemp = null;
+                    let finalTemp = 0;
+
+                    // Build the data points for each step
+                    for (let i = 1; i <= stepCount; i++) {
+                      // Get step data
+                      const stepType = hass.states[`input_select.profile_step${i}_type`].state;
+                      const stepTemp = parseFloat(hass.states[`input_number.profile_step${i}_temp`].state);
+                      const stepDuration = parseFloat(hass.states[`input_number.profile_step${i}_duration`].state);
+
+                      // Store the final temperature for later use
+                      finalTemp = stepTemp;
+
+                      // Add point at the start of the step based on step type
+                      if (i === 1) {
+                        // First step always starts at its own temperature
+                        data.push([currentTime, stepTemp]);
+                        previousTemp = stepTemp;
+                      } else {
+                        if (stepType === 'hold') {
+                          // Hold step - starts at its own temperature
+                          data.push([currentTime, stepTemp]);
+                        } else if (stepType === 'ramp') {
+                          // Ramp step - starts at previous step's temperature
+                          data.push([currentTime, previousTemp]);
+                        }
+                      }
+
+                      // Calculate end time
+                      const durationMs = stepDuration * 24 * 60 * 60 * 1000;
+                      currentTime += durationMs;
+
+                      // Add point at the end of the step (always at the step's target temperature)
+                      data.push([currentTime, stepTemp]);
+
+                      // Update previous temperature for next step
+                      previousTemp = stepTemp;
+                    }
+
+                    return data;
+                  } catch (error) {
+                    return [[Date.now(), 0]];
+                  }
+            now:
+              show: true
+              label: Now
+            apex_config:
+              yaxis:
+                min: 0
+                max: 50
+      - type: grid
+        cards:
+          - type: vertical-stack
+            cards:
+              - type: vertical-stack
+                cards:
+                  - type: markdown
+                    content: >
+                      ### Step 1 Start Time: {{
+                      states('input_datetime.beer_profile_start_time') }}  
+                  - type: entities
+                    entities:
+                      - entity: input_datetime.beer_profile_start_time
+                        name: Start Time and Date
+                      - entity: script.initialize_profile_start_time
+                        name: Set to Now
+                        icon: mdi:clock-time-eight
+                      - entity: input_select.profile_step1_type
+                      - entity: input_number.profile_step1_temp
+                        name: Temperature (°C)
+                      - entity: input_number.profile_step1_duration
+                        name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 1
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 2 Start Time: {% set days =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days) %} {{ step_start.strftime('%Y-%m-%d
+                        %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step2_type
+                        - entity: input_number.profile_step2_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step2_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 2
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 3 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2) %} {{
+                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step3_type
+                        - entity: input_number.profile_step3_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step3_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 3
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 4 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3) %} {{
+                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step4_type
+                        - entity: input_number.profile_step4_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step4_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 4
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 5 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4) %} {{
+                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step5_type
+                        - entity: input_number.profile_step5_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step5_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 5
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 6 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set days5 =
+                        states('input_number.profile_step5_duration') | float %} {%
+                        set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4+days5) %} {{
+                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step6_type
+                        - entity: input_number.profile_step6_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step6_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 6
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 7 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set days5 =
+                        states('input_number.profile_step5_duration') | float %} {%
+                        set days6 = states('input_number.profile_step6_duration') |
+                        float %} {% set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4+days5+days6) %} {{
+                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step7_type
+                        - entity: input_number.profile_step7_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step7_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 7
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 8 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set days5 =
+                        states('input_number.profile_step5_duration') | float %} {%
+                        set days6 = states('input_number.profile_step6_duration') |
+                        float %} {% set days7 =
+                        states('input_number.profile_step7_duration') | float %} {%
+                        set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4+days5+days6+days7) %}
+                        {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step8_type
+                        - entity: input_number.profile_step8_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step8_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 8
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 9 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set days5 =
+                        states('input_number.profile_step5_duration') | float %} {%
+                        set days6 = states('input_number.profile_step6_duration') |
+                        float %} {% set days7 =
+                        states('input_number.profile_step7_duration') | float %} {%
+                        set days8 = states('input_number.profile_step8_duration') |
+                        float %} {% set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4+days5+days6+days7+days8)
+                        %} {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step9_type
+                        - entity: input_number.profile_step9_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step9_duration
+                          name: Duration (days)
+              - type: conditional
+                conditions:
+                  - condition: numeric_state
+                    entity: input_number.profile_step_count
+                    above: 9
+                card:
+                  type: vertical-stack
+                  cards:
+                    - type: markdown
+                      content: >
+                        ### Step 10 Start Time: {% set days1 =
+                        states('input_number.profile_step1_duration') | float %} {%
+                        set days2 = states('input_number.profile_step2_duration') |
+                        float %} {% set days3 =
+                        states('input_number.profile_step3_duration') | float %} {%
+                        set days4 = states('input_number.profile_step4_duration') |
+                        float %} {% set days5 =
+                        states('input_number.profile_step5_duration') | float %} {%
+                        set days6 = states('input_number.profile_step6_duration') |
+                        float %} {% set days7 =
+                        states('input_number.profile_step7_duration') | float %} {%
+                        set days8 = states('input_number.profile_step8_duration') |
+                        float %} {% set days9 =
+                        states('input_number.profile_step9_duration') | float %} {%
+                        set start_time =
+                        strptime(states('input_datetime.beer_profile_start_time'),
+                        '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
+                        timedelta(days=days1+days2+days3+days4+days5+days6+days7+days8+days9)
+                        %} {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                    - type: entities
+                      entities:
+                        - entity: input_select.profile_step10_type
+                        - entity: input_number.profile_step10_temp
+                          name: Temperature (°C)
+                        - entity: input_number.profile_step10_duration
+                          name: Duration (days)
+          - type: horizontal-stack
+            cards:
+              - type: entities
+                entities:
+                  - entity: script.add_profile_step
+                    name: Add Step
+                    icon: mdi:plus
+              - type: entities
+                entities:
+                  - entity: script.remove_profile_step
+                    name: Remove Step
+                    icon: mdi:minus
+          - type: markdown
+            content: >
+              ### Profile End Time {% set total_days = namespace(value=0) %} {%
+              for i in range(1, states('input_number.profile_step_count')|int +
+              1) %}
+                {% set total_days.value = total_days.value + states('input_number.profile_step' + i|string + '_duration')|float %}
+              {% endfor %} {% set start_time =
+              strptime(states('input_datetime.beer_profile_start_time'),
+              '%Y-%m-%d %H:%M:%S') %} {% set end_time = start_time +
+              timedelta(days=total_days.value) %} {{ end_time.strftime('%Y-%m-%d
+              %H:%M:%S') }}
+
+              {% set days = total_days.value | int %} {% set remaining_hours =
+              ((total_days.value - days) * 24) | int %} {% set minutes =
+              ((total_days.value * 24 * 60) % 60) | round %} Total Duration: {{
+              days }} days, {{ remaining_hours }} hours, {{ minutes }} minutes
+  - title: Advanced
+    path: fermentation
+    type: sections
+    max_columns: 4
+    sections:
+      - type: grid
+        cards:
+          - type: entities
+            entities:
+              - entity: sensor.${DEVICE}_fridge_temperature_slow
+                name: Fridge Temperature (filtered)
+              - entity: sensor.${DEVICE}_beer_temperature_slow
+                name: Beer Temperature (filtered)
+          - type: entities
+            title: PID Controller Details
+            entities:
+              - entity: sensor.${DEVICE}_pid_beer_error
+                name: Error (P Term)
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_pid_beer_integral
+                name: Integral (I Term)
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_beer_temperature_slope
+                name: Slope (D Term)
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_pid_output
+                name: Raw PID Output
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_pid_fridge_setpoint
+                name: PID Calculated Fridge Setpoint
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_controller_state
+                name: State Machine Value
+                secondary_info: last-updated
+          - type: entities
+            title: System Information
+            entities:
+              - entity: sensor.${DEVICE}_wifi_signal_strength
+                name: WiFi Signal Strength
+              - entity: sensor.${DEVICE}_ip_address
+                name: IP Address
+      - type: grid
+        cards:
+          - type: entities
+            title: Learning System - Heat
+            entities:
+              - entity: sensor.${DEVICE}_heat_overshoot_per_hour_sensor
+                name: Heat Overshoot Rate (°C/hour)
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_heat_overshoot_sensor
+                name: Current Heat Overshoot Estimate
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_last_actual_heat_overshoot
+                name: Last Measured Heat Overshoot
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_heat_count
+                name: Heating Cycle Count
+                secondary_info: last-updated
+          - type: entities
+            title: Learning System - Cool
+            entities:
+              - entity: sensor.${DEVICE}_cool_overshoot_per_hour_sensor
+                name: Cool Overshoot Rate (°C/hour)
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_cool_overshoot_sensor
+                name: Current Cool Overshoot Estimate
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_last_actual_cool_overshoot
+                name: Last Measured Cool Overshoot
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_cool_count
+                name: Cooling Cycle Count
+                secondary_info: last-updated
+          - type: entities
+            title: Prediction & Adaptation
+            entities:
+              - entity: sensor.${DEVICE}_estimated_peak_temperature
+                name: Estimated Peak Temperature
+                secondary_info: last-updated
+              - entity: sensor.${DEVICE}_adaptation_factor
+                name: Adaptation Factor
+                secondary_info: last-updated
+          - type: entities
+            entities:
+              - entity: button.${DEVICE}_reset_learning
+                name: Reset Learning
+      - type: grid
+        cards:
+          - type: markdown
+            content: >-
+              ### Learning System Sensors
+
+
+              - **Heat/Cool Overshoot Rate** Learned rate of temperature
+              rise/fall after heating/cooling stops (°C/hour). This will adjust
+              slowly up and down based on the measured overshoot on each peak
+              detect cycle
+
+              - **Current Heat/Cool Overshoot Estimate** Calculated temperature
+              overshoot for the current heating/cooling cycle. The longer the
+              heating/cooling period, the higher the estimated overshoot. Only
+              valid during heating and cooling.
+
+              - **Last Measured Heat/Cool Overshoot** This is the actual
+              setpoint overshoot from the last heating/cooling cycle. It should
+              tend towards zero over time
+
+              - **Heating/Cooling Cycle Count** The total number of heating
+              cooling cycles.
+
+              - **Estimated Peak Temperature** Predicted peak temperature based
+              on current temperature and learned overshoot. This should slowly
+              tend towards the setpoint. During idle it just shows the current
+              temperature
+
+              - **Adaptation Factor** Current adaptation factor used to adjust
+              overshoot estimations. Should tend towards 1 (no change) over
+              time.
+
+              - **Reset Learning** Resets all learning sensors to default
+              values. Note: learning sensor values are otherwise persisted to
+              the device across reboots.
+      - type: grid
+        cards: []

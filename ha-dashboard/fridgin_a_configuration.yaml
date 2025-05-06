@@ -1,0 +1,791 @@
+# Fridgin-Awesome Configuration for Home Assistant
+# To use this with Home Assistant's packages feature, add this to configuration.yaml:
+#
+# homeassistant:
+#   packages:
+#     fridgin_awesome: !include fridgin_a_configuration.yaml
+#
+# Note: This configuration uses a placeholder ESPHome device name "${DEVICE}".
+# You must edit the file to change the placeholder to your actual device name.
+
+# ----------------------------------------------------------------------------------
+# BEER PROFILE CONFIGURATION
+# ----------------------------------------------------------------------------------
+
+# Input Number Entities for Custom Profiles
+input_number:
+  profile_step1_temp:
+    name: Step 1 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step1_duration:
+    name: Step 1 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step2_temp:
+    name: Step 2 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step2_duration:
+    name: Step 2 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step3_temp:
+    name: Step 3 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step3_duration:
+    name: Step 3 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step4_temp:
+    name: Step 4 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step4_duration:
+    name: Step 4 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step5_temp:
+    name: Step 5 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step5_duration:
+    name: Step 5 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step6_temp:
+    name: Step 6 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step6_duration:
+    name: Step 6 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step7_temp:
+    name: Step 7 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step7_duration:
+    name: Step 7 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step8_temp:
+    name: Step 8 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step8_duration:
+    name: Step 8 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step9_temp:
+    name: Step 9 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step9_duration:
+    name: Step 9 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+    
+  profile_step10_temp:
+    name: Step 10 Temperature
+    min: 0
+    max: 30
+    step: 0.5
+    unit_of_measurement: °C
+    icon: mdi:thermometer
+    initial: 20
+    
+  profile_step10_duration:
+    name: Step 10 Duration
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: days
+    icon: mdi:calendar-clock
+    initial: 3
+
+  # Profile management helpers
+  profile_step_count:
+    name: Number of Steps
+    min: 1
+    max: 10
+    step: 1
+    initial: 3
+    icon: mdi:stairs
+
+# Additional helpers for start time and profile management
+input_datetime:
+  beer_profile_start_time:
+    name: Profile Start Time
+    has_date: true
+    has_time: true
+    icon: mdi:clock-start
+
+# Profile storage
+input_text:
+  profile_name:
+    name: Profile Name
+    initial: My Custom Profile
+    icon: mdi:format-title
+  
+  beer_profile_storage_1:
+    name: Profile 1
+    max: 1024
+    icon: mdi:flask
+    
+  beer_profile_storage_2:
+    name: Profile 2
+    max: 1024
+    icon: mdi:flask
+    
+  beer_profile_storage_3:
+    name: Profile 3
+    max: 1024
+    icon: mdi:flask
+    
+  beer_profile_storage_4:
+    name: Profile 4
+    max: 1024
+    icon: mdi:flask
+    
+  beer_profile_storage_5:
+    name: Profile 5
+    max: 1024
+    icon: mdi:flask
+
+# Input Select Entities for Step Types
+input_select:
+  profile_step1_type:
+    name: Step 1 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+  
+  profile_step2_type:
+    name: Step 2 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+  
+  profile_step3_type:
+    name: Step 3 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step4_type:
+    name: Step 4 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step5_type:
+    name: Step 5 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step6_type:
+    name: Step 6 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step7_type:
+    name: Step 7 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step8_type:
+    name: Step 8 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step9_type:
+    name: Step 9 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+
+  profile_step10_type:
+    name: Step 10 Type
+    options:
+      - hold
+      - ramp
+    initial: hold
+    icon: mdi:format-list-bulleted-type
+    
+# ----------------------------------------------------------------------------------
+# VARIABLE SENSOR CONFIGURATION
+# ----------------------------------------------------------------------------------
+
+# Template configuration for the variables sensor
+template:
+  # Variables sensor for storing beer profiles and other data
+  - trigger:
+      - platform: event
+        event_type: set_variable
+      - platform: event
+        event_type: remove_variable
+      - platform: event
+        event_type: clear_variables
+    condition:
+      - condition: template
+        value_template: >
+          {{
+              (
+                trigger.event.event_type == 'set_variable'
+                and trigger.event.data is defined
+                and trigger.event.data.key is defined
+                and trigger.event.data.value is defined
+              )
+              or
+              (
+                trigger.event.event_type == 'remove_variable'
+                and trigger.event.data is defined
+                and trigger.event.data.key is defined
+              )
+              or 
+              trigger.event.event_type == 'clear_variables'
+          }}
+    action:
+      - if: "{{ trigger.event.data.get('log', state_attr('sensor.variables', 'log_events')) }}"
+        then:
+          - service: logbook.log
+            data:
+              name: "{{ trigger.event.event_type }}:"
+              message: >
+                {{ trigger.event.data.key | default('All variables removed') }}
+                {%- if trigger.event.event_type == 'set_variable' -%}
+                  : {{ trigger.event.data.value }}.
+                {%- endif -%}
+    sensor:
+      - unique_id: 4a4c8e53-9e68-4198-9cc5-b336e228ea4d
+        name: Variables
+        state: Variables
+        attributes:
+          default_timestamp: false
+          log_events: true
+          variables: >
+            {% set others = dict(this.attributes.get('variables', {}).items() | rejectattr('0', 'eq', trigger.event.data.key)) %}
+            {% if trigger.event.event_type == 'set_variable'
+                and trigger.event.data.get('set_timestamp', this.attributes.get('default_timestamp', false))
+            %}
+              {% set value  = trigger.event.data.value %}
+              {% set value = value.isoformat() if value is datetime else value %}
+              {% set new = {trigger.event.data.key: {'value': value, 'timestamp': now().isoformat()}} %}
+              {{ dict(others, **new) }}
+            {% elif trigger.event.event_type == 'set_variable' %}
+              {% set new = {trigger.event.data.key: trigger.event.data.value} %}
+              {{ dict(others, **new) }}
+            {% elif trigger.event.event_type == 'remove_variable' %}
+              {{ others }}
+            {% elif trigger.event.event_type == 'clear_variables' %}
+              {}
+            {% endif %}
+  
+  # Template-based profile selection
+  - select:
+      - name: "Beer Profile Selection"
+        state: "New Profile"
+        optimistic: true
+        options: >
+          {{ ['New Profile'] + 
+            (state_attr('sensor.variables', 'variables').beer_profiles.keys() | list if state_attr('sensor.variables', 'variables') is defined 
+             and state_attr('sensor.variables', 'variables').beer_profiles is defined else []) }}
+        select_option:
+          - if:
+              condition: template
+              value_template: "{{ option == 'New Profile' }}"
+            then:
+              - service: input_text.set_value
+                data:
+                  entity_id: input_text.profile_name
+                  value: "New Beer Profile"
+                  
+              - service: input_number.set_value
+                data:
+                  entity_id: input_number.profile_step_count
+                  value: 1
+                  
+              - service: input_select.select_option
+                data:
+                  entity_id: input_select.profile_step1_type
+                  option: "hold"
+                  
+              - service: input_number.set_value
+                data:
+                  entity_id: input_number.profile_step1_temp
+                  value: 20
+                  
+              - service: input_number.set_value
+                data:
+                  entity_id: input_number.profile_step1_duration
+                  value: 3
+                  
+              - service: input_datetime.set_datetime
+                data:
+                  entity_id: input_datetime.beer_profile_start_time
+                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+            
+          - if:
+              condition: template
+              value_template: >
+                {{ option != 'New Profile' and
+                   state_attr('sensor.variables', 'variables') is defined and
+                   state_attr('sensor.variables', 'variables').beer_profiles is defined and
+                   option in state_attr('sensor.variables', 'variables').beer_profiles }}
+            then:
+              - service: script.turn_on
+                data:
+                  entity_id: script.load_beer_profile
+
+# ----------------------------------------------------------------------------------
+# SCRIPTS FOR PROFILE MANAGEMENT
+# ----------------------------------------------------------------------------------
+
+script:
+  # Initialize variables sensor with empty beer_profiles structure
+  initialize_beer_profiles:
+    alias: Initialize Beer Profiles
+    description: Initializes the variables sensor with an empty beer_profiles structure
+    mode: restart
+    sequence:
+      - event: set_variable
+        event_data:
+          key: "beer_profiles"
+          value: "{}"
+          log: true
+      - service: persistent_notification.create
+        data:
+          title: "Variables Initialized"
+          message: "The variables sensor has been initialized with an empty beer_profiles structure."
+          
+  # Test profile with 6-minute steps for validation
+  apply_test_profile:
+    alias: Apply Test Profile (6-min steps)
+    description: Applies a quick test profile with 6-minute steps to verify functionality
+    mode: restart
+    sequence:
+      - service: esphome.${DEVICE}_apply_beer_profile
+        data:
+          profile_json: >
+            {
+              "steps": [
+                {"type": "hold", "temperature": 20, "duration_hours": 0.1},
+                {"type": "ramp", "target_temperature": 18, "duration_hours": 0.1},
+                {"type": "hold", "temperature": 18, "duration_hours": 0.1}
+              ]
+            }
+      - service: persistent_notification.create
+        data:
+          title: "Test Profile Applied"
+          message: >
+            Applied a test profile with 6-minute steps.
+            Check the Beer Temperature Setpoint to verify it changes over the next 18 minutes.
+            
+  # Custom profile from input fields with variable steps support
+  apply_custom_beer_profile:
+    alias: Apply Custom Beer Profile
+    description: Applies a custom beer profile using input fields with variable steps
+    mode: restart
+    sequence:
+      # Calculate start time Unix timestamp
+      - variables:
+          start_timestamp: >
+            {% set datetime_obj = strptime(states('input_datetime.beer_profile_start_time'), '%Y-%m-%d %H:%M:%S') %}
+            {{ datetime_obj.timestamp() | int }}
+          steps_count: "{{ states('input_number.profile_step_count') | int }}"
+      - service: esphome.${DEVICE}_apply_beer_profile
+        data:
+          profile_json: >
+            {
+              "start_time": {{ start_timestamp }},
+              "steps": [
+                {% for i in range(1, states('input_number.profile_step_count') | int + 1) %}
+                {
+                  "type": "{{ states('input_select.profile_step' + i | string + '_type') }}", 
+                  "{% if states('input_select.profile_step' + i | string + '_type') == 'hold' %}temperature{% else %}target_temperature{% endif %}": {{ states('input_number.profile_step' + i | string + '_temp') | float }}, 
+                  "duration_hours": {{ (states('input_number.profile_step' + i | string + '_duration') | float) * 24 }}
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+              ]
+            }
+      - service: persistent_notification.create
+        data:
+          title: "Custom Profile Applied"
+          message: >
+            Applied a custom beer profile with {{ states('input_number.profile_step_count') | int }} steps starting at {{ states('input_datetime.beer_profile_start_time') }}.
+            Check the Beer Temperature Setpoint to verify it changes according to your profile.
+            
+  # Initialize the profile start time to now
+  initialize_profile_start_time:
+    alias: Initialize Profile Start Time
+    description: Sets the profile start time to current time
+    mode: restart
+    sequence:
+      - service: input_datetime.set_datetime
+        data:
+          entity_id: input_datetime.beer_profile_start_time
+          datetime: >-
+            {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+            
+  # Add a step to the profile
+  add_profile_step:
+    alias: Add Profile Step
+    description: Adds a new step to the profile (if not at max)
+    mode: restart
+    sequence:
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.profile_step_count
+          value: >
+            {% set current = states('input_number.profile_step_count') | float %}
+            {% set max = states.input_number.profile_step_count.attributes.max | float %}
+            {{ [current + 1, max] | min }}
+      - service: persistent_notification.create
+        data:
+          title: "Profile Step Added"
+          message: >
+            {% set current = states('input_number.profile_step_count') | int %}
+            Added Step {{ current }} to your profile.
+            {% if current == states.input_number.profile_step_count.attributes.max | int %}
+            You've reached the maximum number of steps ({{ current }}).
+            {% endif %}
+            
+  # Remove a step from the profile
+  remove_profile_step:
+    alias: Remove Profile Step
+    description: Removes the last step from the profile (if not at min)
+    mode: restart
+    sequence:
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.profile_step_count
+          value: >
+            {% set current = states('input_number.profile_step_count') | float %}
+            {% set min = states.input_number.profile_step_count.attributes.min | float %}
+            {{ [current - 1, min] | max }}
+      - service: persistent_notification.create
+        data:
+          title: "Profile Step Removed"
+          message: >
+            {% set current = states('input_number.profile_step_count') | int %}
+            Removed last step from your profile. Current step count: {{ current }}.
+            {% if current == states.input_number.profile_step_count.attributes.min | int %}
+            You've reached the minimum number of steps ({{ current }}).
+            {% endif %}
+            
+  # Save the current profile
+  save_beer_profile:
+    alias: Save Beer Profile
+    description: Saves the current profile configuration to the beer_profiles storage
+    mode: restart
+    sequence:
+      # Determine profile_id - use selected profile or generate new one if "New Profile" is selected
+      - variables:
+          profile_name: "{{ states('input_text.profile_name') }}"
+          profile_id: >
+            {% if states('select.beer_profile_selection') == 'New Profile' %}
+              {{ profile_name }}
+            {% else %}
+              {{ states('select.beer_profile_selection') }}
+            {% endif %}
+      
+      # Get existing beer_profiles structure or create empty dict
+      - variables:
+          beer_profiles: >
+            {% if state_attr('sensor.variables', 'variables') is defined 
+               and state_attr('sensor.variables', 'variables').beer_profiles is defined %}
+               {{ state_attr('sensor.variables', 'variables').beer_profiles }}
+            {% else %}
+               {}
+            {% endif %}
+
+      # Build profile data JSON
+      - variables:
+          profile_data: >
+            {
+              "name": "{{ profile_name }}",
+              "created": "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}",
+              "steps_count": {{ states('input_number.profile_step_count') | int }},
+              "start_time": "{{ states('input_datetime.beer_profile_start_time') }}",
+              "steps": [
+                {% for i in range(1, states('input_number.profile_step_count') | int + 1) %}
+                {
+                  "type": "{{ states('input_select.profile_step' + i | string + '_type') }}",
+                  "temperature": {{ states('input_number.profile_step' + i | string + '_temp') | float }},
+                  "duration_days": {{ states('input_number.profile_step' + i | string + '_duration') | float }}
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+              ]
+            }
+      
+      # Create updated profiles JSON with the new or updated profile
+      - variables:
+          updated_profiles: >
+            {
+              {% for id, data in beer_profiles.items() if id != profile_id %}
+                "{{ id }}": {{ data | to_json }}{% if not loop.last or true %},{% endif %}
+              {% endfor %}
+              "{{ profile_id }}": {{ profile_data }}
+            }
+      
+      # Store in variables sensor under beer_profiles key
+      - event: set_variable
+        event_data:
+          key: "beer_profiles"
+          value: "{{ updated_profiles }}"
+          log: true
+          
+      - service: persistent_notification.create
+        data:
+          title: "Profile Saved"
+          message: >
+            Saved "{{ profile_name }}" with {{ states('input_number.profile_step_count') | int }} steps.
+            
+  # Load a profile from storage
+  load_beer_profile:
+    alias: Load Beer Profile
+    description: Loads a profile from the variables sensor using the selected profile
+    mode: restart
+    sequence:
+      - variables:
+          profile_id: "{{ states('select.beer_profile_selection') }}"
+      
+      # Skip if "New Profile" is selected
+      - condition: template
+        value_template: "{{ profile_id != 'New Profile' }}"
+      
+      # Check if profile exists in beer_profiles
+      - condition: template
+        value_template: >
+          {{ 
+            state_attr('sensor.variables', 'variables') is defined and
+            state_attr('sensor.variables', 'variables').beer_profiles is defined and
+            profile_id in state_attr('sensor.variables', 'variables').beer_profiles
+          }}
+      
+      # Get profile data
+      - variables:
+          profile: "{{ state_attr('sensor.variables', 'variables').beer_profiles[profile_id] }}"
+      
+      # Set profile name
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.profile_name
+          value: "{{ profile.name | default(profile_id) }}"
+      
+      # Set step count  
+      - service: input_number.set_value
+        data:
+          entity_id: input_number.profile_step_count
+          value: "{{ profile.steps_count | default(3) }}"
+      
+      # Set start time
+      - service: input_datetime.set_datetime
+        data:
+          entity_id: input_datetime.beer_profile_start_time
+          datetime: "{{ profile.start_time | default(now().strftime('%Y-%m-%d %H:%M:%S')) }}"
+      
+      # Set each step's values from the profile
+      - repeat:
+          count: "{{ profile.steps_count | default(3) }}"
+          sequence:
+            - variables:
+                step_index: "{{ repeat.index }}"
+                step_data: "{{ profile.steps[repeat.index - 1] | default({}) }}"
+            
+            # Set step type
+            - service: input_select.select_option
+              data:
+                entity_id: "input_select.profile_step{{ step_index }}_type"
+                option: "{{ step_data.type | default('hold') }}"
+            
+            # Set step temperature  
+            - service: input_number.set_value
+              data:
+                entity_id: "input_number.profile_step{{ step_index }}_temp"
+                value: "{{ step_data.temperature | default(20) }}"
+            
+            # Set step duration  
+            - service: input_number.set_value
+              data:
+                entity_id: "input_number.profile_step{{ step_index }}_duration"
+                value: "{{ step_data.duration_days | default(3) }}"
+      
+      - service: persistent_notification.create
+        data:
+          title: "Profile Loaded"
+          message: >
+            Loaded profile "{{ profile.name | default(profile_id) }}" (ID: {{ profile_id }}).
+            Profile has {{ profile.steps_count | default(0) }} steps and was created on {{ profile.created | default('unknown date') }}.
+            
+  # Delete profile
+  delete_beer_profile:
+    alias: Delete Beer Profile
+    description: Deletes the selected profile from the variables sensor
+    mode: restart
+    sequence:
+      - variables:
+          profile_id: "{{ states('select.beer_profile_selection') }}"
+          
+      # Skip if "New Profile" is selected
+      - condition: template
+        value_template: "{{ profile_id != 'New Profile' }}"
+        
+      # Check if profile exists in beer_profiles
+      - condition: template
+        value_template: >
+          {{ 
+            state_attr('sensor.variables', 'variables') is defined and
+            state_attr('sensor.variables', 'variables').beer_profiles is defined and
+            profile_id in state_attr('sensor.variables', 'variables').beer_profiles
+          }}
+          
+      # Get the profile name for the notification
+      - variables:
+          profile: "{{ state_attr('sensor.variables', 'variables').beer_profiles[profile_id] }}"
+          profile_name: "{{ state_attr('sensor.variables', 'variables').beer_profiles[profile_id].name | default(profile_id) }}"
+      
+      # Get existing beer_profiles structure
+      - variables:
+          beer_profiles: "{{ state_attr('sensor.variables', 'variables').beer_profiles }}"
+          
+      # Create updated profiles without the deleted one
+      - variables:
+          updated_profiles: >
+            {
+              {% for id, data in beer_profiles.items() if id != profile_id %}
+                "{{ id }}": {{ data | to_json }}{% if not loop.last %},{% endif %}
+              {% endfor %}
+            }
+          
+      # Store updated profiles in variables sensor
+      - event: set_variable
+        event_data:
+          key: "beer_profiles"
+          value: "{{ updated_profiles }}"
+          log: true
+          
+      # Reset profile name field
+      - service: input_text.set_value
+        data:
+          entity_id: input_text.profile_name
+          value: "My Custom Profile"
+          
+      - service: persistent_notification.create
+        data:
+          title: "Profile Deleted"
+          message: >
+            Deleted profile "{{ profile_name }}" (ID: {{ profile_id }}).
