@@ -1,0 +1,7 @@
+{
+  "steps": [
+    {"type": "hold", "temperature": 20.0, "duration_hours": 0.1},
+    {"type": "ramp", "target_temperature": 18.0, "duration_hours": 0.1},
+    {"type": "hold", "temperature": 18.0, "duration_hours": 0.1}
+  ]
+}
