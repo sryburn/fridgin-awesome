@@ -168,6 +168,13 @@ interval:
             fridgeTemp = id(beer_set).state - $pid_max;
           }
           
+          // Also apply absolute temperature limits
+          if (fridgeTemp > $temp_set_max) {
+            fridgeTemp = $temp_set_max;
+          } else if (fridgeTemp < $temp_set_min) {
+            fridgeTemp = $temp_set_min;
+          }
+          
           // Store the calculated fridge setting
           id(fridge_set_by_pid) = fridgeTemp;
           

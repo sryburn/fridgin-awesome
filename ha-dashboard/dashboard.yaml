@@ -70,7 +70,7 @@ views:
             title: Beer Fermentation Profile Status
             entities:
               - entity: number.${DEVICE}_beer_set
-                name: Current Temperature Setpoint
+                name: Current Beer Setpoint
               - entity: sensor.${DEVICE}_beer_profile_status
                 name: Profile Status
               - entity: sensor.${DEVICE}_beer_profile_current_step

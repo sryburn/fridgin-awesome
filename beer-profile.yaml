@@ -81,7 +81,9 @@ api:
             // Calculate initial setpoint
             if (step_count > 0) {
               if (id(profile_step_types)[0] == 1) { // hold
-                id(beer_set).state = id(profile_step_temps)[0];
+                auto call = id(beer_set).make_call();
+                call.set_value(id(profile_step_temps)[0]);
+                call.perform();
               }
             }
             
@@ -200,7 +202,9 @@ script:
               }
               
               // Update setpoint
-              id(beer_set).state = target_temp;
+              auto call = id(beer_set).make_call();
+              call.set_value(target_temp);
+              call.perform();
               
               // Update step description
               char buffer[64];
@@ -259,7 +263,9 @@ script:
               // Keep the last temperature
               if (id(profile_steps_count) > 0) {
                 int last_idx = id(profile_steps_count) - 1;
-                id(beer_set).state = id(profile_step_temps)[last_idx];
+                auto call = id(beer_set).make_call();
+                call.set_value(id(profile_step_temps)[last_idx]);
+                call.perform();
               }
               
               id(beer_profile_step).publish_state("Profile complete");
