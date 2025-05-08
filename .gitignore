@@ -4,3 +4,5 @@
 /.esphome/
 /secrets.yaml
 *.code-workspace
+
+**/.claude/settings.local.json

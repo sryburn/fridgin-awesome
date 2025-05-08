@@ -14,10 +14,12 @@ api:
             // Check for custom start time in JSON, otherwise use current time
             id(profile_start_time) = id(homeassistant_time).now().timestamp;
             
-            // Allow specifying a custom start time in the JSON
+            // Check if the JSON already contains a start_time
+            bool has_start_time = false;
             json::parse_json(profile_json, [&](JsonObject root) {
               if (root.containsKey("start_time")) {
                 id(profile_start_time) = root["start_time"].as<time_t>();
+                has_start_time = true;
                 ESP_LOGD("beer_profile", "Using custom start time: %ld", id(profile_start_time));
               }
               return true;
@@ -91,6 +93,61 @@ api:
             id(beer_profile_status).publish_state("Active");
             id(beer_profile_step).publish_state("Starting profile...");
             
+            // Create compact JSON for transmitting to Home Assistant
+            std::string compact_json = "{\"b\":";
+            compact_json += std::to_string(id(profile_start_time));
+            
+            // Type array (y for types, h=hold, r=ramp)
+            compact_json += ",\"y\":[";
+            for (int i = 0; i < step_count; i++) {
+              if (i > 0) compact_json += ",";
+              if (id(profile_step_types)[i] == 1) {
+                compact_json += "\"h\""; // hold
+              } else {
+                compact_json += "\"r\""; // ramp
+              }
+            }
+            compact_json += "]";
+            
+            // Temperature array
+            compact_json += ",\"t\":[";
+            for (int i = 0; i < step_count; i++) {
+              if (i > 0) compact_json += ",";
+              compact_json += std::to_string((int)id(profile_step_temps)[i]);
+              // Add decimal part only if it's not a whole number
+              float decimal_part = id(profile_step_temps)[i] - (int)id(profile_step_temps)[i];
+              if (decimal_part > 0.01) {
+                compact_json += "." + std::to_string((int)(decimal_part * 10));
+              }
+            }
+            compact_json += "]";
+            
+            // Duration array
+            compact_json += ",\"d\":[";
+            for (int i = 0; i < step_count; i++) {
+              if (i > 0) compact_json += ",";
+              compact_json += std::to_string((int)id(profile_step_durations)[i]);
+              // Add decimal part only if it's not a whole number
+              float decimal_part = id(profile_step_durations)[i] - (int)id(profile_step_durations)[i];
+              if (decimal_part > 0.01) {
+                compact_json += "." + std::to_string((int)(decimal_part * 10));
+              }
+            }
+            compact_json += "]}";
+            
+            // Check length to ensure we're within limits
+            ESP_LOGD("beer_profile", "Compact JSON length: %d chars", compact_json.length());
+            if (compact_json.length() > 250) {
+              ESP_LOGW("beer_profile", "Compact JSON too long (%d chars), may be truncated", compact_json.length());
+            }
+            
+            // Store in the global variable for use in the update loop
+            id(profile_compact_json) = compact_json;
+            
+            // Publish to the sensor
+            id(beer_profile_chart_data).publish_state(compact_json);
+            ESP_LOGD("beer_profile", "Generated compact profile JSON: %s", compact_json.c_str());
+            
             ESP_LOGD("beer_profile", "Applied new profile with %d steps, starting at timestamp %ld", 
                     step_count, id(profile_start_time));
         # Call the profile calculation script immediately
@@ -132,17 +189,35 @@ globals:
     type: float[10]  # Changed from int to float
     restore_value: true
     initial_value: '{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}'
+  - id: profile_compact_json
+    type: std::string  
+    restore_value: true
+    initial_value: '"{}"'
 
 # Create a script for the profile calculation
 script:
   - id: calculate_beer_profile
     then:
       - lambda: |-
-          if (id(mode).state != "Profile" || id(profile_steps_count) == 0) {
-            // Profile inactive or empty
-            id(beer_profile_status).publish_state("Inactive");
+          if (id(profile_steps_count) == 0) {
+            // No profile data at all
+            id(beer_profile_status).publish_state("No profile");
             id(profile_elapsed_time).publish_state("--");
             id(profile_step_remaining_time).publish_state("--");
+            id(beer_profile_chart_data).publish_state("{}");
+            return;
+          }
+          
+          if (id(mode).state != "Profile") {
+            // Profile exists but mode is not active
+            id(beer_profile_status).publish_state("Paused");
+            id(profile_elapsed_time).publish_state("--");
+            id(profile_step_remaining_time).publish_state("--");
+            
+            // Still show the profile data in the chart, just mark it as paused
+            if (!id(profile_compact_json).empty()) {
+              id(beer_profile_chart_data).publish_state(id(profile_compact_json));
+            }
             return;
           }
           
@@ -299,6 +374,12 @@ script:
           }
           
           id(profile_elapsed_time).publish_state(time_buffer);
+          
+          // Just publish the pre-generated compact JSON from the global variable
+          if (!id(profile_compact_json).empty()) {
+            id(beer_profile_chart_data).publish_state(id(profile_compact_json));
+            ESP_LOGD("beer_profile", "Published stored compact profile JSON");
+          }
 
 # Run profile calculation regularly
 interval:
@@ -325,3 +406,9 @@ text_sensor:
     name: "Beer Profile Step Remaining Time"
     id: profile_step_remaining_time
     icon: "mdi:clock-end"
+    
+  - platform: template
+    name: "Beer Profile Chart Data"
+    id: beer_profile_chart_data
+    icon: "mdi:chart-line"
+    update_interval: 60s  # Ensure regular updates

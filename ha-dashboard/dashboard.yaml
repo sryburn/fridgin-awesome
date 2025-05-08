@@ -23,7 +23,6 @@ views:
                 entity: select.${DEVICE}_mode
                 state:
                   - Beer
-                  - Profile
             card:
               type: entities
               entities:
@@ -41,6 +40,121 @@ views:
                 - entity: number.${DEVICE}_fridge_setpoint
                   name: Fridge Setpoint
                   icon: mdi:target
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: select.${DEVICE}_mode
+                state:
+                  - Profile
+            card:
+              type: entities
+              title: Beer Fermentation Profile Status
+              entities:
+                - entity: sensor.current_beer_setpoint
+                  name: Current Beer Setpoint
+                - entity: sensor.${DEVICE}_beer_profile_status
+                  name: Profile Status
+                - entity: sensor.${DEVICE}_beer_profile_current_step
+                  name: Current Step
+                - entity: sensor.${DEVICE}_beer_profile_step_remaining_time
+                  name: Current Step Time Remaining
+                - entity: sensor.${DEVICE}_beer_profile_elapsed_time
+                  name: Total Time Elapsed
+                  icon: mdi:clock-outline
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: select.${DEVICE}_mode
+                state:
+                  - Profile
+            card:
+              type: custom:apexcharts-card
+              header:
+                show: true
+                title: Active Beer Profile (Running on Device)
+                show_states: true
+              graph_span: 30d
+              span:
+                offset: +15d
+              series:
+                - entity: sensor.${DEVICE}_beer_profile_chart_data
+                  name: Active Profile
+                  type: line
+                  stroke_width: 2
+                  color: rgba(255, 99, 71, 0.8)
+                  show:
+                    legend_value: false
+                    in_header: false
+                  extend_to: now
+                  data_generator: |
+                    const data = [];
+
+                    // Parse JSON from the sensor - now in the compact format
+                    try {
+                      // Parse the compact JSON format
+                      const json = JSON.parse(entity.state);
+                      
+                      // Check if we have valid data
+                      if (!json || !json.b || !json.y || !json.t || !json.d) {
+                        return [[Date.now(), 0]];
+                      }
+                      
+                      // Extract profile data from compact format
+                      // b = begin time (start_time)
+                      // y = type array (h=hold, r=ramp)
+                      // t = temperature array
+                      // d = duration array (in hours)
+                      
+                      // Convert timestamp to milliseconds for JavaScript
+                      const startTimeMs = json.b * 1000;
+                      let currentTimeMs = startTimeMs;
+                      let previousTemp = null;
+                      
+                      // Process each step in the profile using parallel arrays
+                      for (let i = 0; i < json.y.length; i++) {
+                        // Get step data from the parallel arrays
+                        const stepType = json.y[i];
+                        const stepTemp = json.t[i];
+                        const stepDuration = json.d[i];
+                        
+                        // Add point at the start of the step based on step type
+                        if (i === 0) {
+                          // First step always starts at its temperature
+                          data.push([currentTimeMs, stepTemp]);
+                          previousTemp = stepTemp;
+                        } else {
+                          if (stepType === 'h') { // hold
+                            // Hold step - starts at its own temperature
+                            data.push([currentTimeMs, stepTemp]);
+                          } else if (stepType === 'r') { // ramp
+                            // Ramp step - starts at previous step's temperature
+                            data.push([currentTimeMs, previousTemp]);
+                          }
+                        }
+                        
+                        // Calculate end time
+                        const durationMs = stepDuration * 60 * 60 * 1000;
+                        currentTimeMs += durationMs;
+                        
+                        // Add point at the end of the step
+                        data.push([currentTimeMs, stepTemp]);
+                        
+                        // Update previous temperature for next step
+                        previousTemp = stepTemp;
+                      }
+                      
+                      return data;
+                    } catch (error) {
+                      console.error("Error parsing beer profile data:", error);
+                      return [[Date.now(), 0]];
+                    }
+              now:
+                show: true
+                label: Now
+              apex_config:
+                yaxis:
+                  min: 0
+                  max: 50
       - type: grid
         column_span: 4
         cards:
@@ -59,27 +173,13 @@ views:
                 name: Beer Setpoint
             grid_options:
               columns: full
-  - title: Beer Profile
+  - title: Profile Management
     type: sections
     path: beer-profile
     max_columns: 4
     sections:
       - type: grid
         cards:
-          - type: entities
-            title: Beer Fermentation Profile Status
-            entities:
-              - entity: number.${DEVICE}_beer_set
-                name: Current Beer Setpoint
-              - entity: sensor.${DEVICE}_beer_profile_status
-                name: Profile Status
-              - entity: sensor.${DEVICE}_beer_profile_current_step
-                name: Current Step
-              - entity: sensor.${DEVICE}_beer_profile_step_remaining_time
-                name: Current Step Time Remaining
-              - entity: sensor.${DEVICE}_beer_profile_elapsed_time
-                name: Total Time Elapsed
-                icon: mdi:clock-outline
           - type: entities
             title: Profile Management
             entities:
@@ -124,11 +224,11 @@ views:
               title: Beer Profile Timeline
               show_states: true
             graph_span: 30d
-            update_interval: 10s
             span:
               offset: +15d
             series:
-              - entity: input_number.profile_step_count
+              - entity: sensor.variables
+                attribute: beer_profiles
                 name: Profile Plan
                 type: line
                 stroke_width: 2
@@ -137,15 +237,20 @@ views:
                   legend_value: false
                   in_header: false
                 extend_to: now
-                data_generator: |
+                data_generator: >
                   const data = [];
 
-                  const stepCount = entity.state;
+
+                  const stepCount =
+                  hass.states['input_number.profile_step_count'].state;
+
 
                   // Safety check - make sure we have a valid step count
+
                   if (isNaN(stepCount) || stepCount < 1) {
                     return [[Date.now(), 0]];
                   }
+
 
                   try {
                     // Get start time
@@ -194,6 +299,11 @@ views:
                   } catch (error) {
                     return [[Date.now(), 0]];
                   }
+              - entity: select.beer_profile_selection
+                name: Trigger
+                show:
+                  in_header: false
+                  in_chart: false
             now:
               show: true
               label: Now
@@ -234,8 +344,8 @@ views:
                     - type: markdown
                       content: >
                         ### Step 2 Start Time: {% set days =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days) %} {{ step_start.strftime('%Y-%m-%d
@@ -258,9 +368,10 @@ views:
                     - type: markdown
                       content: >
                         ### Step 3 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2) %} {{
@@ -283,11 +394,12 @@ views:
                     - type: markdown
                       content: >
                         ### Step 4 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2+days3) %} {{
@@ -310,12 +422,14 @@ views:
                     - type: markdown
                       content: >
                         ### Step 5 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2+days3+days4) %} {{
@@ -338,14 +452,16 @@ views:
                     - type: markdown
                       content: >
                         ### Step 6 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set days5 =
-                        states('input_number.profile_step5_duration') | float %} {%
-                        set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set days5 =
+                        states('input_number.profile_step5_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2+days3+days4+days5) %} {{
@@ -368,19 +484,22 @@ views:
                     - type: markdown
                       content: >
                         ### Step 7 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set days5 =
-                        states('input_number.profile_step5_duration') | float %} {%
-                        set days6 = states('input_number.profile_step6_duration') |
-                        float %} {% set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set days5 =
+                        states('input_number.profile_step5_duration') | float %}
+                        {% set days6 =
+                        states('input_number.profile_step6_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
-                        timedelta(days=days1+days2+days3+days4+days5+days6) %} {{
-                        step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                        timedelta(days=days1+days2+days3+days4+days5+days6) %}
+                        {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
                     - type: entities
                       entities:
                         - entity: input_select.profile_step7_type
@@ -399,21 +518,24 @@ views:
                     - type: markdown
                       content: >
                         ### Step 8 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set days5 =
-                        states('input_number.profile_step5_duration') | float %} {%
-                        set days6 = states('input_number.profile_step6_duration') |
-                        float %} {% set days7 =
-                        states('input_number.profile_step7_duration') | float %} {%
-                        set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set days5 =
+                        states('input_number.profile_step5_duration') | float %}
+                        {% set days6 =
+                        states('input_number.profile_step6_duration') | float %}
+                        {% set days7 =
+                        states('input_number.profile_step7_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
-                        timedelta(days=days1+days2+days3+days4+days5+days6+days7) %}
-                        {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                        timedelta(days=days1+days2+days3+days4+days5+days6+days7)
+                        %} {{ step_start.strftime('%Y-%m-%d %H:%M:%S') }}
                     - type: entities
                       entities:
                         - entity: input_select.profile_step8_type
@@ -432,18 +554,22 @@ views:
                     - type: markdown
                       content: >
                         ### Step 9 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set days5 =
-                        states('input_number.profile_step5_duration') | float %} {%
-                        set days6 = states('input_number.profile_step6_duration') |
-                        float %} {% set days7 =
-                        states('input_number.profile_step7_duration') | float %} {%
-                        set days8 = states('input_number.profile_step8_duration') |
-                        float %} {% set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set days5 =
+                        states('input_number.profile_step5_duration') | float %}
+                        {% set days6 =
+                        states('input_number.profile_step6_duration') | float %}
+                        {% set days7 =
+                        states('input_number.profile_step7_duration') | float %}
+                        {% set days8 =
+                        states('input_number.profile_step8_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2+days3+days4+days5+days6+days7+days8)
@@ -466,20 +592,24 @@ views:
                     - type: markdown
                       content: >
                         ### Step 10 Start Time: {% set days1 =
-                        states('input_number.profile_step1_duration') | float %} {%
-                        set days2 = states('input_number.profile_step2_duration') |
-                        float %} {% set days3 =
-                        states('input_number.profile_step3_duration') | float %} {%
-                        set days4 = states('input_number.profile_step4_duration') |
-                        float %} {% set days5 =
-                        states('input_number.profile_step5_duration') | float %} {%
-                        set days6 = states('input_number.profile_step6_duration') |
-                        float %} {% set days7 =
-                        states('input_number.profile_step7_duration') | float %} {%
-                        set days8 = states('input_number.profile_step8_duration') |
-                        float %} {% set days9 =
-                        states('input_number.profile_step9_duration') | float %} {%
-                        set start_time =
+                        states('input_number.profile_step1_duration') | float %}
+                        {% set days2 =
+                        states('input_number.profile_step2_duration') | float %}
+                        {% set days3 =
+                        states('input_number.profile_step3_duration') | float %}
+                        {% set days4 =
+                        states('input_number.profile_step4_duration') | float %}
+                        {% set days5 =
+                        states('input_number.profile_step5_duration') | float %}
+                        {% set days6 =
+                        states('input_number.profile_step6_duration') | float %}
+                        {% set days7 =
+                        states('input_number.profile_step7_duration') | float %}
+                        {% set days8 =
+                        states('input_number.profile_step8_duration') | float %}
+                        {% set days9 =
+                        states('input_number.profile_step9_duration') | float %}
+                        {% set start_time =
                         strptime(states('input_datetime.beer_profile_start_time'),
                         '%Y-%m-%d %H:%M:%S') %} {% set step_start = start_time +
                         timedelta(days=days1+days2+days3+days4+days5+days6+days7+days8+days9)
@@ -641,5 +771,3 @@ views:
               - **Reset Learning** Resets all learning sensors to default
               values. Note: learning sensor values are otherwise persisted to
               the device across reboots.
-      - type: grid
-        cards: []

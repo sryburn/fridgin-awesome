@@ -21,7 +21,7 @@ packages:
   beer_pid: !include beer_pid.yaml  
 
   # Beer profile management
-  beer_profile: !include beer-profile.yaml
+  beer_profile: !include beer_profile.yaml
 
   # [Optional] Debug sensors exposing internal variables
   monitoring_sensors: !include monitoring_sensors.yaml

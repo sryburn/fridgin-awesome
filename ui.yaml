@@ -70,6 +70,7 @@ select:
       - 'Beer'
       - 'Profile'
     on_value:
+      - script.execute: calculate_beer_profile # Immediatly pauses or resumes beer profile based on mode change
       - lambda: |-
           // Set state to IDLE
           id(set_state)->execute("IDLE"); 

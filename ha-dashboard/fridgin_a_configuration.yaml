@@ -393,6 +393,12 @@ template:
             {% elif trigger.event.event_type == 'clear_variables' %}
               {}
             {% endif %}
+
+  - sensor:             
+      - name: "Current Beer Setpoint"
+        unique_id: beer_setpoint_readonly
+        state: "{{ states('number.${DEVICE}_beer_set') }}"
+        unit_of_measurement: °C              
   
   # Template-based profile selection
   - select:
