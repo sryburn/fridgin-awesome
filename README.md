@@ -125,7 +125,7 @@ This tab shows the current state of your fermentation controller:
 - Current setpoints
 - Temperature history graph
 
-### Beer Profile Tab
+### Profile Management Tab
 
 This tab allows you to create, save, load, and apply beer fermentation profiles:
 
