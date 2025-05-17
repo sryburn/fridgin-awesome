@@ -18,8 +18,8 @@ substitutions:
   beer_temp_address: '0xd103168221c1ff28'
                       
   # SYSTEM PARAMETERS
-  temp_set_min: '1' #The fridge and beer temperatures cannot go below this value.
-  temp_set_max: '30' # The fridge and beer temperatures cannot go above this value.
+  temp_set_min: '-10' #The fridge and beer temperatures cannot go below this value.
+  temp_set_max: '35' # The fridge and beer temperatures cannot go above this value.
   temp_set_default: '20' # In case of reset where previous setting cannot be restored
   
   # Time parameters
