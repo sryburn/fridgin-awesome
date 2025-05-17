@@ -14,27 +14,26 @@ api:
             // Check for custom start time in JSON, otherwise use current time
             id(profile_start_time) = id(homeassistant_time).now().timestamp;
             
-            // Check if the JSON already contains a start_time
-            bool has_start_time = false;
+            // Parse start time from JSON if present
             json::parse_json(profile_json, [&](JsonObject root) {
               if (root.containsKey("start_time")) {
                 id(profile_start_time) = root["start_time"].as<time_t>();
-                has_start_time = true;
                 ESP_LOGD("beer_profile", "Using custom start time: %ld", id(profile_start_time));
               }
               return true;
             });
             
+            // Reset profile state
             id(profile_current_step) = 0;
             
             // Clear existing steps
             for (int i = 0; i < id(MAX_PROFILE_STEPS); i++) {
               id(profile_step_types)[i] = 0; // 0=none, 1=hold, 2=ramp
               id(profile_step_temps)[i] = 0;
-              id(profile_step_durations)[i] = 0.0; // Changed to float
+              id(profile_step_durations)[i] = 0.0;
             }
             
-            // Parse the JSON
+            // Parse the profile steps from JSON
             int step_count = 0;
             json::parse_json(profile_json, [&](JsonObject root) {
               if (root["steps"].is<JsonArray>()) {
@@ -45,6 +44,7 @@ api:
                     break;
                   }
                   
+                  // Process step type and temperature
                   if (step.containsKey("type")) {
                     const char* type = step["type"];
                     
@@ -60,11 +60,10 @@ api:
                       }
                     }
                     
+                    // Process step duration
                     if (step.containsKey("duration_hours")) {
-                      // Store duration as float to handle partial hours correctly
                       id(profile_step_durations)[step_count] = step["duration_hours"].as<float>();
                       
-                      // Add extra debug output
                       ESP_LOGD("beer_profile", "Step %d duration: %.3f hours (%.1f minutes)", 
                               step_count + 1, 
                               id(profile_step_durations)[step_count],
@@ -80,20 +79,18 @@ api:
             
             id(profile_steps_count) = step_count;
             
-            // Calculate initial setpoint
-            if (step_count > 0) {
-              if (id(profile_step_types)[0] == 1) { // hold
-                auto call = id(beer_set).make_call();
-                call.set_value(id(profile_step_temps)[0]);
-                call.perform();
-              }
+            // Set initial temperature setpoint if profile has steps
+            if (step_count > 0 && id(profile_step_types)[0] == 1) { // hold
+              auto call = id(beer_set).make_call();
+              call.set_value(id(profile_step_temps)[0]);
+              call.perform();
             }
             
             // Update status displays
             id(beer_profile_status).publish_state("Active");
             id(beer_profile_step).publish_state("Starting profile...");
             
-            // Create compact JSON for transmitting to Home Assistant
+            // Generate compact JSON representation for Home Assistant (to keep within 254 character state limit)
             std::string compact_json = "{\"b\":";
             compact_json += std::to_string(id(profile_start_time));
             
@@ -101,11 +98,7 @@ api:
             compact_json += ",\"y\":[";
             for (int i = 0; i < step_count; i++) {
               if (i > 0) compact_json += ",";
-              if (id(profile_step_types)[i] == 1) {
-                compact_json += "\"h\""; // hold
-              } else {
-                compact_json += "\"r\""; // ramp
-              }
+              compact_json += (id(profile_step_types)[i] == 1) ? "\"h\"" : "\"r\"";
             }
             compact_json += "]";
             
@@ -114,6 +107,7 @@ api:
             for (int i = 0; i < step_count; i++) {
               if (i > 0) compact_json += ",";
               compact_json += std::to_string((int)id(profile_step_temps)[i]);
+              
               // Add decimal part only if it's not a whole number
               float decimal_part = id(profile_step_temps)[i] - (int)id(profile_step_temps)[i];
               if (decimal_part > 0.01) {
@@ -127,6 +121,7 @@ api:
             for (int i = 0; i < step_count; i++) {
               if (i > 0) compact_json += ",";
               compact_json += std::to_string((int)id(profile_step_durations)[i]);
+              
               // Add decimal part only if it's not a whole number
               float decimal_part = id(profile_step_durations)[i] - (int)id(profile_step_durations)[i];
               if (decimal_part > 0.01) {
@@ -135,19 +130,18 @@ api:
             }
             compact_json += "]}";
             
-            // Check length to ensure we're within limits
+            // Log and check compact JSON length
             ESP_LOGD("beer_profile", "Compact JSON length: %d chars", compact_json.length());
-            if (compact_json.length() > 250) {
+            if (compact_json.length() > 254) {
               ESP_LOGW("beer_profile", "Compact JSON too long (%d chars), may be truncated", compact_json.length());
             }
             
-            // Store in the global variable for use in the update loop
+            // Store and publish the compact JSON
             id(profile_compact_json) = compact_json;
-            
-            // Publish to the sensor
+            global_preferences->sync();
             id(beer_profile_chart_data).publish_state(compact_json);
-            ESP_LOGD("beer_profile", "Generated compact profile JSON: %s", compact_json.c_str());
             
+            ESP_LOGD("beer_profile", "Generated compact profile JSON: %s", compact_json.c_str());
             ESP_LOGD("beer_profile", "Applied new profile with %d steps, starting at timestamp %ld", 
                     step_count, id(profile_start_time));
         # Call the profile calculation script immediately
@@ -193,14 +187,17 @@ globals:
     type: std::string  
     restore_value: true
     initial_value: '"{}"'
+    max_restore_data_length: 254
 
 # Create a script for the profile calculation
 script:
   - id: calculate_beer_profile
     then:
       - lambda: |-
+          ESP_LOGD("beer_profile", "profile_compact_json length: %d bytes", id(profile_compact_json).length());
+          
+          // Handle case with no profile data
           if (id(profile_steps_count) == 0) {
-            // No profile data at all
             id(beer_profile_status).publish_state("No profile");
             id(profile_elapsed_time).publish_state("--");
             id(profile_step_remaining_time).publish_state("--");
@@ -208,26 +205,23 @@ script:
             return;
           }
           
+          // Handle paused profile due to mode change
           if (id(mode).state != "Profile") {
-            // Profile exists but mode is not active
             id(beer_profile_status).publish_state("Paused");
             id(profile_elapsed_time).publish_state("--");
             id(profile_step_remaining_time).publish_state("--");
             
-            // Still show the profile data in the chart, just mark it as paused
+            // Still show the profile data in the chart
             if (!id(profile_compact_json).empty()) {
               id(beer_profile_chart_data).publish_state(id(profile_compact_json));
             }
             return;
           }
           
-          // Get current time
+          // Calculate elapsed time
           time_t now = id(homeassistant_time).now().timestamp;
-          
-          // Calculate elapsed time in seconds
           uint32_t elapsed_seconds = now - id(profile_start_time);
           
-          // Add debug output
           ESP_LOGD("beer_profile", "Profile time check - elapsed: %u seconds (%.2f hours)", 
                   elapsed_seconds, elapsed_seconds / 3600.0f);
           
@@ -236,7 +230,7 @@ script:
           bool found_step = false;
           
           for (int i = 0; i < id(profile_steps_count); i++) {
-            uint32_t step_duration_seconds = id(profile_step_durations)[i] * 3600.0f; // Cast to float
+            uint32_t step_duration_seconds = id(profile_step_durations)[i] * 3600.0f;
             uint32_t step_end_seconds = step_start_seconds + step_duration_seconds;
             
             ESP_LOGD("beer_profile", "Step %d: starts at %u seconds, ends at %u seconds (duration: %.1f minutes)", 
@@ -257,11 +251,7 @@ script:
                 target_temp = id(profile_step_temps)[i];
               } else if (type == 2) { // ramp
                 // For RAMP: interpolate between previous and next temperature
-                float prev_temp = 20.0f;  // Default
-                if (i > 0) {
-                  prev_temp = id(profile_step_temps)[i-1];
-                }
-                
+                float prev_temp = (i > 0) ? id(profile_step_temps)[i-1] : 20.0f;
                 float next_temp = id(profile_step_temps)[i];
                 
                 // Calculate position in ramp (0.0 to 1.0)
@@ -269,8 +259,7 @@ script:
                 
                 // Linear interpolation 
                 target_temp = prev_temp + position * (next_temp - prev_temp);
-                // Round to 1 decimal place
-                target_temp = roundf(target_temp * 10.0f) / 10.0f;
+                target_temp = roundf(target_temp * 10.0f) / 10.0f;  // Round to 1 decimal place
                 
                 ESP_LOGD("beer_profile", "Ramp position: %.2f (%.1f°C to %.1f°C) = %.1f°C", 
                         position, prev_temp, next_temp, target_temp);
@@ -292,15 +281,12 @@ script:
               }
               id(beer_profile_step).publish_state(buffer);
               
-              // Calculate time elapsed in current step (in seconds)
+              // Calculate and format remaining time for current step
               uint32_t step_elapsed_seconds = elapsed_seconds - step_start_seconds;
-              
-              // Calculate elapsed and remaining time for the current step in minutes
               uint32_t step_duration_minutes = (uint32_t)(id(profile_step_durations)[i] * 60.0f);
               uint32_t step_elapsed_minutes = step_elapsed_seconds / 60;
               uint32_t step_remaining_minutes = step_duration_minutes - step_elapsed_minutes;
               
-              // Format and update remaining time for current step
               char remaining_buffer[64];
               if (step_remaining_minutes >= 1440) { // 24 hours in minutes
                 uint32_t days = step_remaining_minutes / 1440;
@@ -318,7 +304,6 @@ script:
               
               id(profile_step_remaining_time).publish_state(remaining_buffer);
               
-              // Log calculation for debugging
               ESP_LOGD("beer_profile", "Step time - Total: %u minutes, Elapsed: %u minutes, Remaining: %u minutes", 
                       step_duration_minutes, step_elapsed_minutes, step_remaining_minutes);
               
@@ -329,7 +314,7 @@ script:
             step_start_seconds = step_end_seconds;
           }
           
-          // If we didn't find a step, we've completed the profile
+          // Handle profile completion
           if (!found_step) {
             if (id(profile_current_step) < id(profile_steps_count)) {
               id(profile_current_step) = id(profile_steps_count);
@@ -346,6 +331,12 @@ script:
               id(beer_profile_step).publish_state("Profile complete");
               id(profile_step_remaining_time).publish_state("Complete");
             }
+            else if (id(profile_current_step) == id(profile_steps_count)) {
+              // Profile was already completed before reboot
+              ESP_LOGD("beer_profile", "Restored completed profile state after reboot");
+              id(beer_profile_step).publish_state("Profile complete");
+              id(profile_step_remaining_time).publish_state("Complete");
+            }
           }
           
           // Update status text
@@ -357,7 +348,7 @@ script:
           }
           id(beer_profile_status).publish_state(status_buffer);
           
-          // Format and update elapsed time display with days, hours, minutes
+          // Format and update elapsed time display
           char time_buffer[64];
           uint32_t days = elapsed_seconds / 86400;
           uint32_t remaining = elapsed_seconds % 86400;
@@ -375,7 +366,7 @@ script:
           
           id(profile_elapsed_time).publish_state(time_buffer);
           
-          // Just publish the pre-generated compact JSON from the global variable
+          // Publish the pre-generated compact JSON
           if (!id(profile_compact_json).empty()) {
             id(beer_profile_chart_data).publish_state(id(profile_compact_json));
             ESP_LOGD("beer_profile", "Published stored compact profile JSON");
