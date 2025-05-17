@@ -147,4 +147,8 @@ sensor:
 text_sensor:
   - platform: wifi_info
     ip_address:
-      name: IP Address    
+      name: IP Address
+
+switch:
+  - platform: restart
+    name: "Restart $name"      
