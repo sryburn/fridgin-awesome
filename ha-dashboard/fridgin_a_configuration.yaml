@@ -217,31 +217,6 @@ input_text:
     name: Profile Name
     initial: My Custom Profile
     icon: mdi:format-title
-  
-  beer_profile_storage_1:
-    name: Profile 1
-    max: 1024
-    icon: mdi:flask
-    
-  beer_profile_storage_2:
-    name: Profile 2
-    max: 1024
-    icon: mdi:flask
-    
-  beer_profile_storage_3:
-    name: Profile 3
-    max: 1024
-    icon: mdi:flask
-    
-  beer_profile_storage_4:
-    name: Profile 4
-    max: 1024
-    icon: mdi:flask
-    
-  beer_profile_storage_5:
-    name: Profile 5
-    max: 1024
-    icon: mdi:flask
 
 # Input Select Entities for Step Types
 input_select:
@@ -414,34 +389,40 @@ template:
               condition: template
               value_template: "{{ option == 'New Profile' }}"
             then:
-              - service: input_text.set_value
-                data:
+              - action: input_text.set_value
+                target:
                   entity_id: input_text.profile_name
+                data:
                   value: "New Beer Profile"
                   
-              - service: input_number.set_value
-                data:
+              - action: input_number.set_value
+                target:
                   entity_id: input_number.profile_step_count
+                data:
                   value: 1
-                  
-              - service: input_select.select_option
-                data:
+
+              - action: input_select.select_option
+                target:
                   entity_id: input_select.profile_step1_type
+                data:
                   option: "hold"
-                  
-              - service: input_number.set_value
-                data:
+
+              - action: input_number.set_value
+                target:
                   entity_id: input_number.profile_step1_temp
+                data:
                   value: 20
-                  
-              - service: input_number.set_value
-                data:
+
+              - action: input_number.set_value
+                target:
                   entity_id: input_number.profile_step1_duration
-                  value: 3
-                  
-              - service: input_datetime.set_datetime
                 data:
+                  value: 3
+
+              - action: input_datetime.set_datetime
+                target:
                   entity_id: input_datetime.beer_profile_start_time
+                data:
                   datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
             
           - if:
@@ -540,9 +521,10 @@ script:
     description: Sets the profile start time to current time
     mode: restart
     sequence:
-      - service: input_datetime.set_datetime
-        data:
+      - action: input_datetime.set_datetime
+        target:
           entity_id: input_datetime.beer_profile_start_time
+        data:
           datetime: >-
             {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
             
@@ -552,9 +534,10 @@ script:
     description: Adds a new step to the profile (if not at max)
     mode: restart
     sequence:
-      - service: input_number.set_value
-        data:
+      - action: input_number.set_value
+        target:
           entity_id: input_number.profile_step_count
+        data:
           value: >
             {% set current = states('input_number.profile_step_count') | float %}
             {% set max = states.input_number.profile_step_count.attributes.max | float %}
@@ -575,9 +558,10 @@ script:
     description: Removes the last step from the profile (if not at min)
     mode: restart
     sequence:
-      - service: input_number.set_value
-        data:
+      - action: input_number.set_value
+        target:
           entity_id: input_number.profile_step_count
+        data:
           value: >
             {% set current = states('input_number.profile_step_count') | float %}
             {% set min = states.input_number.profile_step_count.attributes.min | float %}
@@ -687,21 +671,24 @@ script:
           profile: "{{ state_attr('sensor.variables', 'variables').beer_profiles[profile_id] }}"
       
       # Set profile name
-      - service: input_text.set_value
-        data:
+      - action: input_text.set_value
+        target:
           entity_id: input_text.profile_name
+        data:
           value: "{{ profile.name | default(profile_id) }}"
       
-      # Set step count  
-      - service: input_number.set_value
-        data:
+      # Set step count
+      - action: input_number.set_value
+        target:
           entity_id: input_number.profile_step_count
-          value: "{{ profile.steps_count | default(3) }}"
-      
-      # Set start time
-      - service: input_datetime.set_datetime
         data:
+          value: "{{ profile.steps_count | default(3) }}"
+
+      # Set start time
+      - action: input_datetime.set_datetime
+        target:
           entity_id: input_datetime.beer_profile_start_time
+        data:
           datetime: "{{ profile.start_time | default(now().strftime('%Y-%m-%d %H:%M:%S')) }}"
       
       # Set each step's values from the profile
@@ -713,21 +700,24 @@ script:
                 step_data: "{{ profile.steps[repeat.index - 1] | default({}) }}"
             
             # Set step type
-            - service: input_select.select_option
-              data:
+            - action: input_select.select_option
+              target:
                 entity_id: "input_select.profile_step{{ step_index }}_type"
+              data:
                 option: "{{ step_data.type | default('hold') }}"
-            
-            # Set step temperature  
-            - service: input_number.set_value
-              data:
+
+            # Set step temperature
+            - action: input_number.set_value
+              target:
                 entity_id: "input_number.profile_step{{ step_index }}_temp"
-                value: "{{ step_data.temperature | default(20) }}"
-            
-            # Set step duration  
-            - service: input_number.set_value
               data:
+                value: "{{ step_data.temperature | default(20) }}"
+
+            # Set step duration
+            - action: input_number.set_value
+              target:
                 entity_id: "input_number.profile_step{{ step_index }}_duration"
+              data:
                 value: "{{ step_data.duration_days | default(3) }}"
       
       - service: persistent_notification.create
@@ -785,9 +775,10 @@ script:
           log: true
           
       # Reset profile name field
-      - service: input_text.set_value
-        data:
+      - action: input_text.set_value
+        target:
           entity_id: input_text.profile_name
+        data:
           value: "My Custom Profile"
           
       - service: persistent_notification.create
